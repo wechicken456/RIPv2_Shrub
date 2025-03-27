@@ -118,11 +118,7 @@ To use a new network address from the default, edit the script to use your chose
 
 ### Requirements
 
-This script has all the requirements to run shim, and additionally uses `ipcalc` which may not be installed by default on all systems.
-
-it can be obtained using your package manager of choice, e.g. 
-
-***NOTE: ipcalc has a variant using apt which is incompatible with the operations used in the twig test script. The script will be redone to not use ipcalc soon, but will not function on non-redhat systems temporarily.***
+This script has all the requirements to run shim, and additionally uses lots of BASH specific expansions such as the arithmetic expansion notation `$(( <expr> ))`.
 
 ```
 sudo dnf install ipcalc
