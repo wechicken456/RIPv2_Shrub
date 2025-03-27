@@ -29,6 +29,8 @@ chmod +x make_pcap.sh
 Also note that the capture file is not removed when the shim is stopped, this is to make it easier to review if your packets are correct or not, though `make_pcap.sh` or `twig_test.sh` *will **overwrite** existing files* if started with the same network configured. 
 
 ## shim.py
+
+### Description
 The shim sits between the pcap file we use as an interface for twig and the real network. 
 
 The shim uses a direct forwarding mechanism, so we can only talk to things on the same local machine as the shim/twig. It also only forwards ipv4 packets which are
@@ -38,6 +40,20 @@ The shim uses a direct forwarding mechanism, so we can only talk to things on th
 or
 
 - On the real interface specified and destined to the network the pcap file represents.
+
+
+### Requirements
+
+To run the shim you will need the following:
+
+- Python `3.X` (tested with `3.12.2`)
+- Python module `scapy`
+- (Usually) Default modules `threading`, `socket`, `ipaddress`, `sys`, `signal`, `json`, `netifaces`, `argparse`
+
+Installing `scapy` (and any other reported missing modules) will require either:
+
+1. Using a virtual environment for python such as via `venv` 
+2. Installing scapy with root via `sudo pip install scapy`
 
 **NOTE: running the shim requires root access since it is accessing your network interface to sniff for packets and is injecting packets 'sent' from the pcap file.**
 
