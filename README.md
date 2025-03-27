@@ -53,7 +53,7 @@ To run the shim you will need the following:
 Installing `scapy` (and any other reported missing modules) will require either:
 
 1. Using a virtual environment for python such as via `venv` 
-2. Installing scapy with root via `sudo pip install scapy`
+2. Installing scapy with root via `sudo pip install scapy` or `sudo apt install python3-scapy`
 
 **NOTE: running the shim requires root access since it is accessing your network interface to sniff for packets and is injecting packets 'sent' from the pcap file.**
 
@@ -104,6 +104,8 @@ or just use twig_test.sh to start the shim and make the pcap file at the same ti
 
 ## twig_test.sh
 
+### Description
+
 This script creates a pcap file with network `172.31.128.0/24`, tries to determine and use your default interface, and starts a copy of [shim.py](README.md#shimpy) between that pcap file and the determined interface.
 
 To close down the shim this script starts, simply use `ctrl+d` or `ctrl+c` in the terminal it is running in.
@@ -113,3 +115,15 @@ If your default interface contains spaces, edit the script to have the name alre
 To use a new network address from the default, edit the script to use your chosen network (non-public IPs only) or enable it to take the network as an argument. Comments in the script identify where to do this.
 
 **NOTE: This script will prompt for password since you need root to run the shim.**
+
+### Requirements
+
+This script has all the requirements to run shim, and additionally uses `ipcalc` which may not be installed by default on all systems.
+
+it can be obtained using your package manager of choice, e.g. 
+
+***NOTE: ipcalc has a variant using apt which is incompatible with the operations used in the twig test script. The script will be redone to not use ipcalc soon, but will not function on non-redhat systems temporarily.***
+
+```
+sudo dnf install ipcalc
+```
