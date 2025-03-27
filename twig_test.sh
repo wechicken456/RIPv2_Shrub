@@ -15,25 +15,58 @@ IFACE_SPEC="172.31.128.1_24"
 ## change to the standard CIDR notation (using a / as a separator between the address and prefix length)
 NETRANGE="$(tr "_" "/" <<< ${IFACE_SPEC})"
 
-## use ipcalc to make sure it is ipv4, get the address, the prefix length, the network name/address, and what category it is in
-storage=$(ipcalc --addrspace  -4 -a -p -n "${NETRANGE}")
+## REPLACE IPCALC WITH FOLLOWING
+ADDRESS="$(awk -F_ '{printf $1}' <<< ${IFACE_SPEC})"
+PREFIX="$(awk -F_ '{printf $2}' <<< ${IFACE_SPEC})"
+## to get network, we just need to bitwise and each octet with the corresponding bits of the prefix.
+## first, make a netmask from the prefix.
 
-## only continue if the address range is not in the 'Internet' space (subset of all public addresses, just a minimal safety check)
-if [ "$(echo "${storage}" | grep "ADDRSPACE")" = 'ADDRSPACE=Internet' ]; then
-	echo "Not creating virtual interface for public IPs, may cause unexpected behavior..."
-	exit -1 
-fi
+# echo "${ADDRESS}"
+# echo "${PREFIX}"
 
-## extract the address, network name, and prefix from the ipcalc results.
-ADDRESS="$(sed -E -n "s/ADDRESS=(.*)/\1/pg" - <<< "${storage}")"
-NETWORK="$(sed -E -n "s/NETWORK=(.*)/\1/pg" - <<< "${storage}")"
-PREFIX="$(sed -E -n "s/PREFIX=(.*)/\1/pg" - <<< "${storage}")"
+PREFIX_COPY="${PREFIX}"
+
+NETMASK=""
+for i in {1..4}; do
+	if (( PREFIX_COPY >= 8 )); then
+		NETMASK="${NETMASK}255"
+		(( PREFIX_COPY -= 8 ))
+
+		if(( i != 4 )); then
+			NETMASK="${NETMASK}."
+		fi
+	else
+		NETMASK="${NETMASK}$(bc <<< '255 - (2^(8-'${PREFIX_COPY}') - 1)')"
+		PREFIX_COPY=0
+		if(( i != 4 )); then
+			NETMASK="${NETMASK}."
+		fi
+	fi
+done
+
+# echo "${NETMASK}"
+
+NETWORK=""
+## now use the netmask to calculate the network name
+for i in {1..4}; do
+	NETWORK="${NETWORK}$(( $(awk -F. '{print $'${i}'}' <<< "${NETMASK}") & $(awk -F. '{print $'${i}'}' <<< "${ADDRESS}")  ))"
+	if(( i != 4 )); then
+		NETWORK="${NETWORK}."
+	fi
+done
+
+
+# echo "${NETWORK}"
 
 ## determine the pcap file name to use
 PCAP_NAME="${NETWORK}_${PREFIX}.dmp"
 
 ## Determine the interface argument string (should be same as IFACE_SPEC)
 IFACE_ARG="${ADDRESS}_${PREFIX}"
+
+# echo "${PCAP_NAME}"
+# echo "${IFACE_ARG}"
+# exit 0
 
 ## make the pcap file
 ## NOTE: this overwrites any existing file of the same name.
