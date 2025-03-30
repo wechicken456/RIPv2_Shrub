@@ -121,7 +121,3 @@ To use a new network address from the default, edit the script to use your chose
 ### Requirements
 
 This script has all the requirements to run shim, and additionally uses lots of BASH specific expansions such as the arithmetic expansion notation `$(( <expr> ))`.
-
-```
-sudo dnf install ipcalc
-```
