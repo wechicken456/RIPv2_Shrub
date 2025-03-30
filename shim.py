@@ -18,18 +18,15 @@ conf.L3socket = L3RawSocket
 ## super slow and bulky...
 def sniff_iface(stop_threads, capfile, network):
 	capwriter = PcapWriter(capfile, append=True, sync=True) ## add endianness, snaplen, bufsize etc. 
-	while(not stop_threads.is_set()):
-		## sniff a pkt
-		pkt = sniff(iface=args.iface, count=1, filter="udp or tcp or icmp")[0]
 
-		## only operate on IPv4 packets whose destination is inside the pcap's network.
-		if IP in pkt and ipaddress.ip_address(pkt.getlayer(IP).dst) in network.network:
-			if(args.debug >0):
-				print("recieved pkt", pkt.summary)
-			# capwriter._write_packet(pkt, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
-			capwriter.write(raw(pkt)) ## compatible with scapy 2.5.0 and 2.6.1
-			capwriter.flush()
+	## sniff pkts
+	## only operate on IPv4 packets whose destination is inside the pcap's network.
 
+	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask }" )
+	
+def write_packetlist(capwriter, pkt):
+	capwriter.write(raw(pkt))#, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
+	capwriter.flush()
 
 ## super slow and bulky...
 def sniff_pcap(stop_threads, capfile, network):
@@ -85,7 +82,6 @@ if __name__ == '__main__':
 	assert(len(netparts) == 2)
 	try:
 		network = IPv4Interface(args.network.replace("_", "/"))
-
 	except socket.error:
 		parser.print_help(sys.stderr)
 		sys.exit(-1)
