@@ -9,6 +9,8 @@
 
 ## Overview
 
+***UPDATE Mar 29 - it appears the latest version of scapy available through `apt` is `2.5.0` which had an incompatibility with a function the shim was using to write packets. Please pull again if you pulled prior to this commit. Also note that it appears 2.5.0 is EXTREMELY poorly performing, so it may take 30+ sec to start getting ping responses after starting ping, and it may be inconsistent (I was recieving ~1/5 packets on my desktop running linux mint)***
+
 To run a simple test using these tools, here are the steps:
 
 1. Open 3 terminals in this repository's directory

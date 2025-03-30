@@ -26,7 +26,8 @@ def sniff_iface(stop_threads, capfile, network):
 		if IP in pkt and ipaddress.ip_address(pkt.getlayer(IP).dst) in network.network:
 			if(args.debug >0):
 				print("recieved pkt", pkt.summary)
-			capwriter._write_packet(pkt, linktype=1, ifname=args.iface)
+			# capwriter._write_packet(pkt, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
+			capwriter.write(raw(pkt)) ## compatible with scapy 2.5.0 and 2.6.1
 			capwriter.flush()
 
 
