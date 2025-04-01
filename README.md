@@ -7,11 +7,20 @@
 - [make_pcap.sh](README.md#make_pcapsh)
 - [twig_test.sh](README.md#twig_testsh)
 
+## Issues and Clarifications (ongoing updates)
+
+- **(Issue)** `Ctrl+d` or `Ctrl+c` will not stop the shim if it is no longer recieving packets to forward to the pcap file (it only checks if it should stop when it gets another packet) 
+	- To stop it then, you can do one of the following
+		- Press `Ctrl+d` or `Ctrl+c` as usual, then send and additional packet to the shim using `ping 172.31.128.2` (or using another of the utilities given) 
+		- Press `Ctrl+\` to forcibly kill the shim. The shim is multi-threaded, not multi-process, so this will correctly terminate it.
+- **(Clarification)** The shim will display a warning when it writes the first packet:  
+	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
+
 ## Overview
 
-***UPDATE Mar 29 ~10:30pm - it appears the latest version of scapy available through `apt` is `2.5.0` which had an incompatibility with a function the shim was using to write packets. Please pull again if you pulled prior to this commit.***
+**Now compatible with scapy Version 2.5.0 as well as 2.6.1**
 
-**Update Mar 29 11:52pm - the performance loss was actually due to the high traffic my onther machine was experiencing,  a more robust filter has been added to the interface sniffer, and it has been transferred to a callback mechanic to improve performance. Still compatible with both scapy 2.5.0 and 2.6.1. Please pull this version.**
+
 
 To run a simple test using these tools, here are the steps:
 
