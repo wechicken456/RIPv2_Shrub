@@ -18,7 +18,6 @@
 	- I recommend either testing first with `ping` or run `time_socket` first, expecting it to go unanswered.
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
-- **(WIP)** Iwill be adding a section with details on the best basic tests to run to make sure your program is fully capable and meets project expectations. These will be in the [Testing](README.md#testing) subsection.
 
 
 ## Overview
