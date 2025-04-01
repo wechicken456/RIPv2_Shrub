@@ -13,6 +13,8 @@
 	- To stop it then, you can do one of the following
 		- Press `Ctrl+d` or `Ctrl+c` as usual, then send and additional packet to the shim using `ping 172.31.128.2` (or using another of the utilities given) 
 		- Press `Ctrl+\` to forcibly kill the shim. The shim is multi-threaded, not multi-process, so this will correctly terminate it.
+- **(Issue)** The first packet recieved by the shim is often discarded. So assume that the first packet will be lost.
+	- I recommend either testing first with `ping` or run `time_socket` first, expecting it to go unanswered.
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
 
