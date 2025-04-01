@@ -4,6 +4,7 @@
 
 - [shim.py](README.md#shimpy)
 - [socket_time.c](README.md#socket_timec)
+- [udpping](README.md#udpping)
 - [make_pcap.sh](README.md#make_pcapsh)
 - [twig_test.sh](README.md#twig_testsh)
 
@@ -17,6 +18,8 @@
 	- I recommend either testing first with `ping` or run `time_socket` first, expecting it to go unanswered.
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
+- **(WIP)** Iwill be adding a section with details on the best basic tests to run to make sure your program is fully capable and meets project expectations. These will be in the [Testing](README.md#testing) subsection.
+
 
 ## Overview
 
@@ -42,6 +45,14 @@ chmod +x make_pcap.sh
 ```
 
 Also note that the capture file is not removed when the shim is stopped, this is to make it easier to review if your packets are correct or not, though `make_pcap.sh` or `twig_test.sh` *will **overwrite** existing files* if started with the same network configured. 
+
+## Testing
+
+WIP 
+
+
+<font size="40">ᕕ( ᐛ )ᕗ</font>
+
 
 ## shim.py
 
@@ -97,6 +108,21 @@ Converted to  a human readable format, it is
 ```
 Thursday, March 27, 2025 3:57:21 AM GMT
 ```
+
+## udpping
+udpping is a basic client for the udp echo protocol.
+
+This client was written by Dr. Shawn Ostermann.
+
+The source code is included in the subdirectory `udp_ping`
+
+To compile, run `make` in the `udp_ping` subdirectory.
+
+By default, testing with `udpping`  will send 1000 packets, and give a summary of results at the end, presuming not all of them were discarded or lost.
+
+`udpping -` will output usage with more details on how to refine your testing.
+
+Testing details to follow in [Testing](README.md#testing)
 
 
 ## make_pcap.sh
