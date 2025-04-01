@@ -48,11 +48,208 @@ Also note that the capture file is not removed when the shim is stopped, this is
 
 ## Testing
 
-WIP 
+This section will detail exactly how to run tests that check basic functionality for your twig program.
+
+The basic format for each test will be very similar to the procedure detailed in the [Overview](README.md#overview), but will be careful to avoid known issues and will have a higher level of detail.
+
+Formatting:
+- Clarifying comments will be italicized like *this*
+- Specific important elements will be bold like **this**
+- Placeholder elements of commands will be indicated using angle brackets (`<>`) with a description of the value they represent contained.
+- Commands, program names, file names, and single-line output will be isolated in in-line code segments like `this`
+- Multiline output and results will be isolated in multiline code blocks like
+```
+this
+```
+
+Notes:
+- IP addresses will be specified absolute assuming a default `twig_test.sh`. If you modify `twig_test.sh` all IP addresses will need to be updated to follow. Additionally, IP addresses specified for use with `twig`, `ping`, `socket_time`, and `udpping` are assumed to be used exactly as written. modifying the IP in any stepp will require modifying it in all related steps.
+- Each test has the same shutdown process, and the same startup process for the shim and twig.
+	- To run **all tests** quickly, you can simply perform **steps 1-5** from any of the following test sections, then perform **steps 6+** from each test in any order sequentially **without performing shutdown in-between.**
+
+### Test 1 (ICMP Ping)
+
+#### Procedure
+1. Open 3 terminal windows, each with this repository as their working directory.
+2. Create a symbolic link to your twig program in the local directory by running the following command in **terminal 1**: `ln -s <your twig directory>/twig ./twig `
+	- *Make sure to replace `<your twig directory>` with the directory your twig program is present in, and ensure you have a binary named `twig` in that directory.*
+3. In **terminal 1**, run `./twig_test.sh`
+	- Authenticate when prompted
+	- *You'll know it is running as expected when you see the line `press ctrl+d to stop `*
+4. In **terminal 2**, start your `twig` on the pcap file's network by running the command `./twig -i 172.31.128.2_24`
+	- *this gives your twig an interface with IP `172.31.128.2` on the network `172.31.128.0/24`*
+5. In **terminal 3**, run `./socket_time 172.31.128.2`, then press `Ctrl+c` to stop `socket_time`.
+	- *This is to get around the issue of the first packet being ignored...* 
+6. In **terminal 3**, run the command `ping -c 15 172.31.128.2` 
+
+#### Shutdown
+
+For shutting down, there is a known issue witht he shim, so follow these steps to shut down cleanly:
+1. In **terminal 3**, run `ping 172.31.128.2`
+	- *This will give packets to the shim and let it check for the shutdown signal. (See [Issues](README.md#issues-and-clarifications-ongoing-updates).)*
+2. In **terminal 1**, press `Ctrl+d`
+	- *`test_twig.sh` should stop running within a second, when `shim.py` recieves a packet.*
+3. In **terminal 3**, press `Ctrl+c`
+	- *`ping` should stop immediately.*
+3. In **terminal 2**, press `Ctrl+c`
+	- *`twig` should stop immediately*
+
+#### Expected Results
+
+The output of the `ping` client from **step 6** is what matters. 
+
+Example **Good** output in **terminal 3** from **step 6**:
+```
+sspringer-fedora-Twig-tools: ping -c 15 172.31.128.2
+PING 172.31.128.2 (172.31.128.2) 56(84) bytes of data.
+64 bytes from 172.31.128.2: icmp_seq=1 ttl=20 time=15.8 ms
+64 bytes from 172.31.128.2: icmp_seq=2 ttl=20 time=27.6 ms
+64 bytes from 172.31.128.2: icmp_seq=3 ttl=20 time=17.9 ms
+64 bytes from 172.31.128.2: icmp_seq=4 ttl=20 time=21.7 ms
+64 bytes from 172.31.128.2: icmp_seq=5 ttl=20 time=14.6 ms
+64 bytes from 172.31.128.2: icmp_seq=6 ttl=20 time=24.7 ms
+64 bytes from 172.31.128.2: icmp_seq=7 ttl=20 time=21.5 ms
+64 bytes from 172.31.128.2: icmp_seq=8 ttl=20 time=20.7 ms
+64 bytes from 172.31.128.2: icmp_seq=9 ttl=20 time=15.7 ms
+64 bytes from 172.31.128.2: icmp_seq=10 ttl=20 time=23.8 ms
+64 bytes from 172.31.128.2: icmp_seq=11 ttl=20 time=13.7 ms
+64 bytes from 172.31.128.2: icmp_seq=12 ttl=20 time=22.7 ms
+64 bytes from 172.31.128.2: icmp_seq=13 ttl=20 time=23.9 ms
+64 bytes from 172.31.128.2: icmp_seq=14 ttl=20 time=21.7 ms
+64 bytes from 172.31.128.2: icmp_seq=15 ttl=20 time=19.5 ms
+
+--- 172.31.128.2 ping statistics ---
+15 packets transmitted, 15 received, 0% packet loss, time 14025ms
+rtt min/avg/max/mdev = 13.718/20.374/27.581/3.946 ms
+```
+
+Key components to make sure are correct:
+- 0% packet loss
+- no `(DUP!)` warnings on any responses
+
+##### Common issues and causes:
+
+- If the first packet (response where `icmp_seq=1`) is missing, verify **Step 5** was performed. If Shutdown has not yet been performed, you may repeat **Step 6** and check the output of that new run.
+
+- If other packets are missing, check first if the `172.31.128.0.dmp` file contains all requests but not all expected responses. 
+	- If it does, the issue likely lies with your twig not replying to everything
+	- If it does not, the issue is likely with t e shim - contact me (Silas) and we'll figure it out.
+
+- If warnings with `(DUP!)` are present, the issue is likely either:
+	- Two `twig`s are running simultaneously with the same interface IP and both are responding
+	- The one running `twig` is not correctly keeping its place in the pcap file, so is reading the request multiple times.
+
+### Test 2 (UDP Ping)
+
+#### Procedure
+1. Open 3 terminal windows, each with this repository as their working directory.
+2. Create a symbolic link to your twig program in the local directory by running the following command in **terminal 1**: `ln -s <your twig directory>/twig ./twig `
+	- *Make sure to replace `<your twig directory>` with the directory your twig program is present in, and ensure you have a binary named `twig` in that directory.*
+3. In **terminal 1**, run `./twig_test.sh`
+	- Authenticate when prompted
+	- *You'll know it is running as expected when you see the line `press ctrl+d to stop `*
+4. In **terminal 2**, start your `twig` on the pcap file's network by running the command `./twig -i 172.31.128.2_24`
+	- *this gives your twig an interface with IP `172.31.128.2` on the network `172.31.128.0/24`*
+5. In **terminal 3**, run `./socket_time 172.31.128.2`, then press `Ctrl+c` to stop `socket_time`.
+	- *This is to get around the issue of the first packet being ignored...* 
+6. In **terminal 3**, move to the udpping directory with `cd udp_ping`
+7. In **terminal 3**, compile udpping (if not done already) with `make`
+8. In **terminal 3**, run the command `udpping 172.31.128.2` 
+
+#### Shutdown
+
+For shutting down, there is a known issue witht he shim, so follow these steps to shut down cleanly:
+1. In **terminal 3**, run `ping 172.31.128.2`
+	- *This will give packets to the shim and let it check for the shutdown signal. (See [Issues](README.md#issues-and-clarifications-ongoing-updates).)*
+2. In **terminal 1**, press `Ctrl+d`
+	- *`test_twig.sh` should stop running within a second, when `shim.py` recieves a packet.*
+3. In **terminal 3**, press `Ctrl+c`
+	- *`ping` should stop immediately.*
+3. In **terminal 2**, press `Ctrl+c`
+	- *`twig` should stop immediately*
+
+#### Expected Results
+
+The output of the `udpping` client from **step 8** is what matters. 
+
+Example **Good** output in **terminal 3** from **step 8**:
+```
+sspringer-fedora-udp_ping: ./udpping 172.31.128.2
+Sending 1000 udp echo requests of size 50 to 172.31.128.2 on port echo
+ 100 200 300 400 500 600 700 800 900
 
 
-<font size="40">ᕕ( ᐛ )ᕗ</font>
+time spent waiting for echos to return (in milliseconds):
+# sent  # rcvd  # late       total        min       max       avg
+------  ------  ------  -----------  --------  --------  --------
+  1000    1000       0    21688.166    11.206    49.648    21.688 
+0.00% packet loss
+```
 
+Key components to make sure are correct:
+- 0.00% packet loss
+
+##### Common issues and causes:
+
+- Similar to ICMP Ping, you may have dups or missing packets, I recommend debugging those on the ICMP side when possible.
+- Debugging missing packets may be simpler with lower numbers, which canbe achieved by specifying how many packets to send with the `-c` option to udpping.		
+	- Then check the `172.31.128.0.dmp` file with wireshark.
+	- Most likely cause for no responses is a bad checksum.
+
+
+
+### Test 3 (socket_time)
+
+#### Procedure
+1. Open 3 terminal windows, each with this repository as their working directory.
+2. Create a symbolic link to your twig program in the local directory by running the following command in **terminal 1**: `ln -s <your twig directory>/twig ./twig `
+	- *Make sure to replace `<your twig directory>` with the directory your twig program is present in, and ensure you have a binary named `twig` in that directory.*
+3. In **terminal 1**, run `./twig_test.sh`
+	- Authenticate when prompted
+	- *You'll know it is running as expected when you see the line `press ctrl+d to stop `*
+4. In **terminal 2**, start your `twig` on the pcap file's network by running the command `./twig -i 172.31.128.2_24`
+	- *this gives your twig an interface with IP `172.31.128.2` on the network `172.31.128.0/24`*
+5. In **terminal 3**, run `./socket_time 172.31.128.2`, then press `Ctrl+c` to stop `socket_time`.
+	- *This is to get around the issue of the first packet being ignored...* 
+6. In **terminal 3**, compile socket_time (if not done already) with `make socket_time`
+7. In **terminal 3**, run the command `./socket_time 172.31.128.2` 
+
+#### Shutdown
+
+For shutting down, there is a known issue witht he shim, so follow these steps to shut down cleanly:
+1. In **terminal 3**, run `ping 172.31.128.2`
+	- *This will give packets to the shim and let it check for the shutdown signal. (See [Issues](README.md#issues-and-clarifications-ongoing-updates).)*
+2. In **terminal 1**, press `Ctrl+d`
+	- *`test_twig.sh` should stop running within a second, when `shim.py` recieves a packet.*
+3. In **terminal 3**, press `Ctrl+c`
+	- *`ping` should stop immediately.*
+3. In **terminal 2**, press `Ctrl+c`
+	- *`twig` should stop immediately*
+
+#### Expected Results
+
+The output of the `socket_time` client from **step 7** is what matters. 
+
+Example **Good** output in **terminal 3** from **step 7**:
+```
+sspringer-fedora-Twig-tools: ./socket_time 172.31.128.2
+The time on 172.31.128.2 is 0xed9296eb
+```
+
+Key components to make sure are correct:
+- The output timestamp is in big-endian (network byte order) hex, complies with the  `1 Jan 1900` timestamp specified by the RFC, and when converted to human readable format is close to the current time.
+	- You can convert this to human readable format using the following steps:
+		- Convert to local byte order (little-endian in this example): `0xeb9692ed` 
+		- Convert to decimal: `3952513773`
+		- Subtract the time offset to convert from the `1900` epoch to the unix standard `1970` epoch timestamp: `1743524973`
+		- Convert unix timestamp to human readable format `2025-04-01 12:29:33` 
+	- Then just check that the time it converts to is within a few minutes of the current time. (*if something is wrong it'll usually be years wrong, not minutes wrong*) 
+
+
+##### Common issues and causes:
+
+- Time appears incorrect despite a correct conversion method
+	- usually caused by a failure to convert the timestamp on to big endian within `twig`, or a failure to convert from the unix standard `1970` epoch to the [RFC 868](https://www.rfc-editor.org/rfc/rfc868.html) `1900` epoch
 
 ## shim.py
 
