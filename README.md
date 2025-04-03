@@ -18,13 +18,29 @@
 	- I recommend either testing first with `ping` or run `time_socket` first, expecting it to go unanswered.
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
-
-
+- **(Clarification)** For debugging there are a few useful tools present.
+	- For debugging checksums, Wireshark can check them for you and let you know if they are right or not. To enable this for UDP and IPv4, open wireshark and navigate to:
+		- `Edit -> Preferences -> Protocols -> IPv4` and check
+			- [x] ` Validate the IPv4 checksum if possible`
+		- `Edit -> Preferences -> Protocols -> UDP` and check
+			- [x] ` Validate the UDP checksum if possible`
+	- For viewing packets as they arrive in the .dmp file we use as a network, the `twig_test.sh` script has the ability to start a live wireshark capture session when it starts the shim. To activate this, run the script with the `-w` option like so:
+		```
+		./twig_test.sh -w
+		```
+		Note that this wireshark window will need to be closed manually, as it does not close when the shim is killed.
+	- For debugging if the shim is seeing your packets or is missing them, you can add `-d` or `-dd` to the line which runs the shim in `twig_test.sh` i.e. change
+		```
+		sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}"
+		```
+		to
+		```
+		sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}" -d
+		```
+		this will make it output a message and a packet summary every time it processes a packet from the pcap file.
 ## Overview
 
 **Now compatible with scapy Version 2.5.0 as well as 2.6.1**
-
-
 
 To run a simple test using these tools, here are the steps:
 
@@ -345,7 +361,11 @@ or just use twig_test.sh to start the shim and make the pcap file at the same ti
 
 This script creates a pcap file with network `172.31.128.0/24`, tries to determine and use your default interface, and starts a copy of [shim.py](README.md#shimpy) between that pcap file and the determined interface.
 
-To close down the shim this script starts, simply use `ctrl+d` or `ctrl+c` in the terminal it is running in.
+To close down the shim this script starts, simply use `ctrl+d` or `ctrl+c` in the terminal it is running in*.
+
+(*) - see [Issues and Clarifications](README.md#issues-and-clarifications-ongoing-updates)
+
+If `-w` is provided as an additional argument to this script when started, it will establish a wireshark session which live-captures from the network pcap file. NOTE: this session doesnt close automatically when you kill the shim, it will need to be closed manually.
 
 If your default interface contains spaces, edit the script to have the name already specified or enable it to take the interface as an argument. Comments in the script identify where to do this.
 
