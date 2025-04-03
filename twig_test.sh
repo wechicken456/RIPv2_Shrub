@@ -12,6 +12,10 @@ EXT_IFACE_NAME="$(ip r | sed -n -E 's/^.*default.*dev ([^ ]*) .*$/\1/p')"
 IFACE_SPEC="172.31.128.1_24"
 # IFACE_SPEC="$2"
 
+## Take -w as an argument and run wireshark if provided.
+## this isnt a robust system, so it will require specific ordering if other arguments become supported...
+RUN_WIRESHARK="${1}"
+
 ## change to the standard CIDR notation (using a / as a separator between the address and prefix length)
 NETRANGE="$(tr "_" "/" <<< ${IFACE_SPEC})"
 
@@ -71,6 +75,12 @@ IFACE_ARG="${ADDRESS}_${PREFIX}"
 ## make the pcap file
 ## NOTE: this overwrites any existing file of the same name.
 ./make_pcap.sh "${PCAP_NAME}"
+
+## start a tail-powered wireshark capture if requested
+if [ "${RUN_WIRESHARK}" = "-w" ]; then
+	echo "starting wireshark"
+	tail -f -c +0 "${PCAP_NAME}" | wireshark -k -i - 1>&2 2>/dev/null &
+fi
 
 ## start the shim - this will take posession of the shell until you kill it.
 
