@@ -76,6 +76,10 @@ IFACE_ARG="${ADDRESS}_${PREFIX}"
 ## NOTE: this overwrites any existing file of the same name.
 ./make_pcap.sh "${PCAP_NAME}"
 
+## TODO: change netmask to represetn correct netmask....
+# sudo ifconfig ${EXT_IFACE_NAME}:0  netmask 255.255.255.0 up
+
+
 ## start a tail-powered wireshark capture if requested
 if [ "${RUN_WIRESHARK}" = "-w" ]; then
 	echo "starting wireshark"
@@ -84,7 +88,7 @@ fi
 
 ## start the shim - this will take posession of the shell until you kill it.
 
-sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}" # -d #(feel free to add -d to enable debugging output.)
+sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}" -d -d # -d #(feel free to add -d to enable debugging output.)
 
 exit 0
 

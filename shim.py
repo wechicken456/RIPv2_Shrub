@@ -13,7 +13,7 @@ import sys
 import threading
 
 # conf.use_pcap = True
-conf.L3socket = L3RawSocket
+# conf.L3socket = L3RawSocket
 
 ## super slow and bulky...
 def sniff_iface(stop_threads, capfile, network):
@@ -22,7 +22,7 @@ def sniff_iface(stop_threads, capfile, network):
 	## sniff pkts
 	## only operate on IPv4 packets whose destination is inside the pcap's network.
 
-	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask }" )
+	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"arp or (( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask })" )
 	
 def write_packetlist(capwriter, pkt):
 	capwriter.write(raw(pkt))#, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
@@ -31,6 +31,7 @@ def write_packetlist(capwriter, pkt):
 ## super slow and bulky...
 def sniff_pcap(stop_threads, capfile, network):
 	capreader = PcapReader(capfile)
+	# s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
 	while(not stop_threads.is_set()):
 		try:
 			## sniff a pkt from the capture file
@@ -44,12 +45,27 @@ def sniff_pcap(stop_threads, capfile, network):
 
 				## write pkt out. specifying interface doesnt do anything.
 				# send(pkt.getlayer(IP), verbose=1, iface=args.iface)
+
 				send(pkt.getlayer(IP), verbose=args.debug)
 
-		except:
-			# sleep for 10ms to prevent thrashing.
+				# if L3RawSocket().send(pkt.getlayer(IP)) != None:#, verbose=args.debug)
+				# 	print(".\nSent 1 Packets")
+				# s.sendto(raw(pkt.getlayer(IP)), (pkt[IP].dst, 0))
+			elif ARP in pkt and ipaddress.ip_address(pkt[ARP].psrc) in network.network:
+				if(args.debug >0):
+					print("sending arp pkt", pkt.summary())
+				sendp(pkt, verbose=args.debug, iface=args.iface)
+
+		except socket.error as e:
+			print(f"socket error: {e}")
+			pass
+		except EOFError:
 			time.sleep(0.01)
 			pass
+		# finally:
+		# 	# sleep for 10ms to prevent thrashing.
+		# 	time.sleep(0.01)
+		# 	pass
 
 
 def sighandler(signum, frame):
@@ -76,6 +92,8 @@ if __name__ == '__main__':
 	## remove the single quotes that argparse adds to the arguments for some reason...
 	args.network = args.network.replace("'", "")
 	args.iface = args.iface.replace("'", "")
+
+	conf.iface = args.iface
 
 	## check format of network argument and parse it.
 	netparts = args.network.split("_")
