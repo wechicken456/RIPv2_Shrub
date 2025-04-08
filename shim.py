@@ -25,6 +25,10 @@ def sniff_iface(stop_threads, capfile, network):
 	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"arp or (( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask })" )
 	
 def write_packetlist(capwriter, pkt):
+	# if pkt[Ether].src == pkt[Ether].dst:
+	# 	return
+	if ARP in pkt and pkt[ARP].op == 2:
+		return
 	capwriter.write(raw(pkt))#, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
 	capwriter.flush()
 
@@ -51,7 +55,7 @@ def sniff_pcap(stop_threads, capfile, network):
 				# if L3RawSocket().send(pkt.getlayer(IP)) != None:#, verbose=args.debug)
 				# 	print(".\nSent 1 Packets")
 				# s.sendto(raw(pkt.getlayer(IP)), (pkt[IP].dst, 0))
-			elif ARP in pkt and ipaddress.ip_address(pkt[ARP].psrc) in network.network:
+			elif ARP in pkt and ipaddress.ip_address(pkt[ARP].psrc) in network.network and pkt[Ether].dst != "ff:ff:ff:ff:ff:ff" and pkt[ARP].hwdst != "ff:ff:ff:ff:ff:ff" and pkt[ARP].hwsrc != "ff:ff:ff:ff:ff:ff" :
 				if(args.debug >0):
 					print("sending arp pkt", pkt.summary())
 				sendp(pkt, verbose=args.debug, iface=args.iface)
@@ -62,10 +66,6 @@ def sniff_pcap(stop_threads, capfile, network):
 		except EOFError:
 			time.sleep(0.01)
 			pass
-		# finally:
-		# 	# sleep for 10ms to prevent thrashing.
-		# 	time.sleep(0.01)
-		# 	pass
 
 
 def sighandler(signum, frame):
