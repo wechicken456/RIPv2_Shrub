@@ -3,13 +3,13 @@
 ## External interface name to use
 ## NOTE: will not work if your default interface has spaces in its name.
 ## if that is the case, either manually define this value, or enable taking the value as an argument.
-EXT_IFACE_NAME="$(ip r | sed -n -E 's/^.*default.*dev ([^ ]*) .*$/\1/p')"
-# EXT_IFACE_NAME="$1"
+EXT_IFACE_NAME="$(ip r | sed -n -E 's/^.*default.*dev ([^ ]*).*$/\1/p' | head -1)"
+# EXT_IFACE_NAME="enp0s13f0u2"
 
 ## Network to use, with interface address embedded.
 ## NOTE: If this interferes with some network you are a part of, change the value manually or
 ## enable taking the value as an argument.
-IFACE_SPEC="172.31.128.1_24"
+IFACE_SPEC="172.31.128.254_24"
 # IFACE_SPEC="$2"
 
 ## Take -w as an argument and run wireshark if provided.
@@ -76,9 +76,24 @@ IFACE_ARG="${ADDRESS}_${PREFIX}"
 ## NOTE: this overwrites any existing file of the same name.
 ./make_pcap.sh "${PCAP_NAME}"
 
-## TODO: change netmask to represetn correct netmask....
-# sudo ifconfig ${EXT_IFACE_NAME}:0  netmask 255.255.255.0 up
+os_name=$(uname -s)
 
+case "$os_name" in
+  "Linux")
+    echo "Operating system: Linux, using ifconfig"
+	sudo ifconfig ${EXT_IFACE_NAME}:0 ${ADDRESS} netmask ${NETMASK} up
+    ;;
+  "Darwin")
+    echo "Operating system: macOS, make sure you have set a secondary IP address of 172.31.128.254/24 on your default interface." ;;
+  *)
+    echo "Operating system: Unknown, terminating"; exit -1;;
+esac
+
+## add address to default interface
+
+## add (permanent) arp entry
+## TEMPORARY
+# sudo arp -s 172.31.128.2 fe:ac:1f:80:02:00
 
 ## start a tail-powered wireshark capture if requested
 if [ "${RUN_WIRESHARK}" = "-w" ]; then
