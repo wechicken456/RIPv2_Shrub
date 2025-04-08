@@ -13,7 +13,7 @@ import sys
 import threading
 
 # conf.use_pcap = True
-# conf.L3socket = L3RawSocket
+# conf.L3socket = L3RawSocket # changed
 
 ## super slow and bulky...
 def sniff_iface(stop_threads, capfile, network):
@@ -29,6 +29,8 @@ def write_packetlist(capwriter, pkt):
 	# 	return
 	if ARP in pkt and pkt[ARP].op == 2:
 		return
+	if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
+		return 
 	capwriter.write(raw(pkt))#, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
 	capwriter.flush()
 
@@ -51,14 +53,17 @@ def sniff_pcap(stop_threads, capfile, network):
 				# send(pkt.getlayer(IP), verbose=1, iface=args.iface)
 
 				send(pkt.getlayer(IP), verbose=args.debug)
+				# sendp(pkt, verbose=args.debug, iface=args.iface) # if using arp
 
 				# if L3RawSocket().send(pkt.getlayer(IP)) != None:#, verbose=args.debug)
 				# 	print(".\nSent 1 Packets")
 				# s.sendto(raw(pkt.getlayer(IP)), (pkt[IP].dst, 0))
-			elif ARP in pkt and ipaddress.ip_address(pkt[ARP].psrc) in network.network and pkt[Ether].dst != "ff:ff:ff:ff:ff:ff" and pkt[ARP].hwdst != "ff:ff:ff:ff:ff:ff" and pkt[ARP].hwsrc != "ff:ff:ff:ff:ff:ff" :
-				if(args.debug >0):
-					print("sending arp pkt", pkt.summary())
-				sendp(pkt, verbose=args.debug, iface=args.iface)
+
+			## if using arp	
+			# elif ARP in pkt and ipaddress.ip_address(pkt[ARP].psrc) in network.network and not pkt[ARP].op == 1 :
+			# 	if(args.debug >0):
+			# 		print("sending arp pkt", pkt.summary())
+			# 	sendp(pkt, verbose=args.debug, iface=args.iface)
 
 		except socket.error as e:
 			print(f"socket error: {e}")
@@ -88,6 +93,9 @@ if __name__ == '__main__':
 	parser.add_argument("-d","--debug", dest="debug", help="Enable debug. specify multiple times for more verbose output.", action='count', default=0)
 
 	args = parser.parse_args()
+
+	if (args.debug > 0):
+		print(f"debug enabled: lvl {args.debug}")
 
 	## remove the single quotes that argparse adds to the arguments for some reason...
 	args.network = args.network.replace("'", "")
