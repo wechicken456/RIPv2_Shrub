@@ -239,10 +239,9 @@ void loop() {
         free(tmp);
 
         if (pfh.linktype == 1) { 
-            int data_len;
-
 		    print_ethernet((struct eth_hdr *) in_packet);
-
+            
+            int data_len = 0;
             unsigned char *data = NULL;
             struct eth_hdr *orig_eth = (struct eth_hdr *)in_packet;
             orig_eth->h_proto = htons(orig_eth->h_proto);
