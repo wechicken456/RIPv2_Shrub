@@ -390,11 +390,19 @@ docker build -t twigimage .
 docker network create --subnet=172.31.127.0/24 twignet
 sudo ip route add 172.31.128.0/24 via 172.31.127.254
 
-docker run --name twigcontainer --net twignet --ip 172.31.127.254 --mount type=bind,src=/home/sspringer/Desktop/Schooling/TA/2025_OUCS_4440/shrub-SilasSpringer,dst=/usr/local/shrub-SilasSpringer --mount type=bind,src=.,dst=/usr/local/twig --rm -it twigimage bash
+docker run --name twigcontainer --net twignet --ip 172.31.127.254 --mount type=bind,src=<twig source directory>,dst=/usr/local/twigsrc --mount type=bind,src=.,dst=/usr/local/twig --rm -it twigimage bash
+	ln -s ../twigsrc/twig twig
+	./twig_test.sh
 
 docker exec -it twigcontainer bash
 	./twig -i 172.31.128.2_24
+
+
+ping 172.31.128.2
 ```
 
-TODO: change the command for running the docker container to correctly have placeholders for the file paths
+TODO: explain the replacements for `<twig source directory>`
 TODO: resolve response duplication...
+TODO: fix symbolic link command with better explanation to say how and why to do it
+	also make sure that it's clear how to do it if your structure looks different or you already have a symlink.
+TODO: add cleanup commands (how to remove the ip route, how to shut down the docker network)
