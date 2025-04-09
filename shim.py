@@ -18,17 +18,25 @@ import threading
 ## super slow and bulky...
 def sniff_iface(stop_threads, capfile, network):
 	capwriter = PcapWriter(capfile, append=True, sync=True) ## add endianness, snaplen, bufsize etc. 
-
+	iface_mac = netifaces.ifaddresses(args.iface)[netifaces.AF_LINK][0]['addr']
+	if (args.debug > 0):
+		print("interface in use has mac:", iface_mac)
 	## sniff pkts
 	## only operate on IPv4 packets whose destination is inside the pcap's network.
 
-	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"arp or (( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask })" )
+	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"arp or (( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask })" )
 	
-def write_packetlist(capwriter, pkt):
-	# if pkt[Ether].src == pkt[Ether].dst:
-	# 	return
+def write_packetlist(capwriter, iface_mac, pkt):
+	## only accept packets which are intended for this interface, or those with broadcast.
+	if iface_mac != pkt[Ether].dst and pkt[Ether].dst != 'ff:ff:ff:ff:ff:ff':
+		if(args.debug > 1):
+			print("packet not for me, mac doesnt match...")
+		return
+	## reject incoming arp replies to prevent loops...
 	if ARP in pkt and pkt[ARP].op == 2:
 		return
+	## reject packets from the network in the file behind us.
+	## TODO: change to work with multi-network setups
 	if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
 		return 
 	capwriter.write(raw(pkt))#, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
