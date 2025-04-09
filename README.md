@@ -376,3 +376,25 @@ To use a new network address from the default, edit the script to use your chose
 ### Requirements
 
 This script has all the requirements to run shim, and additionally uses lots of BASH specific expansions such as the arithmetic expansion notation `$(( <expr> ))`.
+
+## Docker Container Runtime (WIP)
+
+With the new modifications made to the shim for it to be functional on macos, and the future movement to reduce the strict filters in place on incoming traffic to allow multiple subnets behind the single shim, we've built a docker based arrangement to run your twig and the shim inside of.
+
+This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
+Additionally, docker allows us to have a strict environment and allow better portability across systems.
+
+commands (WIP)
+```
+docker build -t twigimage .
+docker network create --subnet=172.31.127.0/24 twignet
+sudo ip route add 172.31.128.0/24 via 172.31.127.254
+
+docker run --name twigcontainer --net twignet --ip 172.31.127.254 --mount type=bind,src=/home/sspringer/Desktop/Schooling/TA/2025_OUCS_4440/shrub-SilasSpringer,dst=/usr/local/shrub-SilasSpringer --mount type=bind,src=.,dst=/usr/local/twig --rm -it twigimage bash
+
+docker exec -it twigcontainer bash
+	./twig -i 172.31.128.2_24
+```
+
+TODO: change the command for running the docker container to correctly have placeholders for the file paths
+TODO: resolve response duplication...

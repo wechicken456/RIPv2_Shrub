@@ -76,18 +76,18 @@ IFACE_ARG="${ADDRESS}_${PREFIX}"
 ## NOTE: this overwrites any existing file of the same name.
 ./make_pcap.sh "${PCAP_NAME}"
 
-os_name=$(uname -s)
+# os_name=$(uname -s)
 
-case "$os_name" in
-  "Linux")
-    echo "Operating system: Linux, using ifconfig"
-	sudo ifconfig ${EXT_IFACE_NAME}:0 ${ADDRESS} netmask ${NETMASK} up
-    ;;
-  "Darwin")
-    echo "Operating system: macOS, make sure you have set a secondary IP address of 172.31.128.254/24 on your default interface." ;;
-  *)
-    echo "Operating system: Unknown, terminating"; exit -1;;
-esac
+# case "$os_name" in
+#   "Linux")
+#     echo "Operating system: Linux, using ifconfig"
+#	sudo ifconfig ${EXT_IFACE_NAME}:0 ${ADDRESS} netmask ${NETMASK} up
+#     ;;
+#   "Darwin")
+#     echo "Operating system: macOS, make sure you have set a secondary IP address of 172.31.128.254/24 on your default interface." ;;
+#   *)
+#     echo "Operating system: Unknown, terminating"; exit -1;;
+# esac
 
 ## add address to default interface
 
