@@ -15,6 +15,7 @@
 #include <arpa/inet.h> 
 #include <sys/time.h>
 #include <stdio.h>
+#include <sys/uio.h>
 
 #define PCAP_MAGIC_LITTLE         0xa1b2c3d4
 #define PCAP_MAGIC_BIG            0xd4c3b2a1
@@ -38,5 +39,12 @@ extern int debug;
 extern int resolveDNS;
 extern int reverseEndian;
 
-
+/* iov is the array of iovecs that will be used to write the REPLY packets to the pcap file
+ * e.g. iov[0] = ethernet, iov[1] = ipv4, iov[2] = icmp, ..., iov[iov_cnt]. 
+ * Note that iov[i] only contains the HEADER at the i-th layer. The data of the i-th packet are the i+1-th, i+2-th, etc. packets due to encapsulation.
+ * iov_cnt is the number of iovecs in the array used to write ONE COMPLETE (all protocols) REPLY packet to the pcap file
+ * iov_cnt is incremented each time a new protocol is added to the REPLY packet, and reset to 0 each time a new COMPLETE REPLY packet is written.
+ */
+extern struct iovec iov[];
+extern int iov_cnt;;
 #endif

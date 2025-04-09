@@ -2,6 +2,7 @@
 #include "icmp.h"
 #include "ipv4.h"
 #include "utils.h"
+#include "ethernet.h"
 /* this normally comes from the pcap.h header file, but we'll just be using
  * a few specific pieces, so we'll add them here
  *
@@ -32,23 +33,6 @@ struct pcap_pkthdr {
 	bpf_u_int32 len;	/* length of this packet (off wire) */
 };
 
-struct eth_hdr {
-    uint8_t  h_dest[6];   /* destination eth addr */
-    uint8_t  h_source[6]; /* source ether addr    */
-    uint16_t h_proto;            /* packet type ID field */
-};
-// https://en.wikipedia.org/wiki/Address_Resolution_Protocol
-struct arp_ipv4_hdr {
-    uint8_t     h_type[2];
-    uint8_t     p_type[2];
-    uint8_t     hlen_plen[2];
-    uint8_t     op[2];
-    uint8_t     sha[6];
-    uint8_t     spa[4];
-    uint8_t     tha[6];
-    uint8_t     tpa[4];
-};
-
 char tcp_flag_string[] = "FSRPAU"; 
 uint32_t host_ipv4_addr;
 int debug = 0;
@@ -61,45 +45,17 @@ int pcap_fd_read;
 int pcap_fd_write;
 struct pcap_file_header pfh;
 
-
-void print_ethernet(struct eth_hdr *peh) {
-    unsigned char *c = (unsigned char*)&(peh->h_proto);
-	printf("%02x:%02x:%02x:%02x:%02x:%02x	%02x:%02x:%02x:%02x:%02x:%02x	0x%02x%02x\n", 
-        peh->h_dest[0], peh->h_dest[1], peh->h_dest[2],
-        peh->h_dest[3], peh->h_dest[4], peh->h_dest[5],
-        peh->h_source[0], peh->h_source[1], peh->h_source[2],
-        peh->h_source[3], peh->h_source[4], peh->h_source[5], c[0], c[1]);
-}
-
-void print_arp(struct arp_ipv4_hdr *arp_frame) {
-    reverse_assign(&(arp_frame->h_type), sizeof(arp_frame->h_type));
-    reverse_assign(&(arp_frame->op), sizeof(arp_frame->op));
-
-    printf("\tARP:\tHWtype:\t%u\n", *(uint16_t*)arp_frame->h_type);
-    printf("\t\thlen:\t%u\n", arp_frame->hlen_plen[0]);
-    printf("\t\tplen:\t%u\n", arp_frame->hlen_plen[1]);
-    printf("\t\tOP:\t%u %s\n", *(uint16_t*)arp_frame->op, 
-                            (*(uint16_t*)arp_frame->op == 1) ? "(ARP request)" : "(ARP reply)");
-
-    printf("\t\tHardware:\t");
-    print_addr_6(arp_frame->sha);
-    puts("");
-    printf("\t\t\t==>\t");
-    print_addr_6(arp_frame->tha);
-    puts("");
-
-    printf("\t\tProtocol:\t");
-    if (arp_frame->hlen_plen[1] == 4) print_addr_4(arp_frame->spa);
-    else print_addr_6(arp_frame->spa);
-    puts("\t");
-    printf("\t\t\t==>\t");
-    if (arp_frame->hlen_plen[1] == 4) print_addr_4(arp_frame->tpa);
-    else print_addr_6(arp_frame->tpa);
-    puts("\t");
-}
+/* iov is the array of iovecs that will be used to write the REPLY packets to the pcap file
+ * e.g. iov[0] = ethernet, iov[1] = ipv4, iov[2] = icmp, ..., iov[iov_cnt]. 
+ * Note that iov[i] only contains the HEADER at the i-th layer. The data of the i-th packet are the i+1-th, i+2-th, etc. packets due to encapsulation.
+ * iov_cnt is the number of iovecs in the array used to write ONE COMPLETE (all protocols) REPLY packet to the pcap file
+ * iov_cnt is incremented each time a new protocol is added to the REPLY packet, and reset to 0 each time a new COMPLETE REPLY packet is written.
+ */
+struct iovec iov[10];
+int iov_cnt = 0;
 
 /* write pcap header + `len` bytes from `data` to the packet capture file `pcap_fd` */
-void write_pcap(void *data, bpf_u_int32 len) {
+void write_pcap() {
     struct pcap_pkthdr *pcap_hdr = (struct pcap_pkthdr *)malloc(sizeof(struct pcap_pkthdr));
     // write the pcap header
     struct timeval tv;
@@ -109,29 +65,34 @@ void write_pcap(void *data, bpf_u_int32 len) {
         return;
     }
 
+    /* calculate the total length of the PCAP packet */
+    unsigned int total_len = 0;
+    for (int i = 0 ; i < iov_cnt; i++) total_len += iov[i].iov_len;
+
     pcap_hdr->ts_secs = tv.tv_sec;
     pcap_hdr->ts_usecs = tv.tv_usec;
-    pcap_hdr->caplen = len;
-    pcap_hdr->len = len;
+    pcap_hdr->caplen = total_len;   // length WITHOUT the pcap header
+    pcap_hdr->len = total_len;
 
-    // write the pcap header first
-    ret = write(pcap_fd_write, pcap_hdr, sizeof(struct pcap_pkthdr));
-    if (ret != sizeof(struct pcap_pkthdr)) {
-        perror("write");
+    iov[0].iov_base = pcap_hdr;
+    iov[0].iov_len = sizeof(struct pcap_pkthdr);
+    total_len += sizeof(struct pcap_pkthdr);
+
+    ret = writev(pcap_fd_write, iov, iov_cnt);
+    if (ret != total_len) { // MUST write all bytes to consider it a success
+        perror("writev");
         return;
     }
-    // move the read pointer to after this header 
-    lseek(pcap_fd_read, ret, SEEK_CUR);
+    /* move the read pointer to after this pcap file */
+    lseek(pcap_fd_read, total_len, SEEK_CUR);
 
-    // then write the packet
-    ret = write(pcap_fd_write, (unsigned char *)data, len);
-    if (ret != len) {
-        perror("write");
-        return;
+    /* reset the iov array */
+    for (int i = 0 ; i < iov_cnt; i++) {
+        free(iov[i].iov_base);
+        iov[i].iov_base = NULL;
+        iov[i].iov_len = 0;
     }
-    // move the read pointer to after this packet 
-    lseek(pcap_fd_read, ret, SEEK_CUR);
-    free(pcap_hdr);
+    iov_cnt = 1;
 }
 
 /* open .dmp pcap file (2 separate fds for read and write) and verify its header */
@@ -186,7 +147,7 @@ void setup(char *filename) {
 }
 
 void loop() {
-    char* in_packet = (char*)malloc(2 << 20);
+    unsigned char* in_packet = (unsigned char*)malloc(2 << 20);
 	/* now read each packet in the file */
 	while (1) {
 
@@ -238,49 +199,15 @@ void loop() {
 		printf("%20s\t%d\t%d\t", tmp, pph.caplen, pph.len);
         free(tmp);
 
+        iov_cnt = 1;
         if (pfh.linktype == 1) { 
-		    print_ethernet((struct eth_hdr *) in_packet);
-            
-            int data_len = 0;
-            unsigned char *data = NULL;
-            struct eth_hdr *orig_eth = (struct eth_hdr *)in_packet;
-            orig_eth->h_proto = htons(orig_eth->h_proto);
-
-            switch (orig_eth->h_proto) { 
-                case ETHERTYPE_IPV4: // IPv4 
-                    data = process_ipv4((struct ipv4_hdr *)(in_packet + sizeof(struct eth_hdr)), &data_len);
-                    if (data == NULL) {
-                        fprintf(stderr, "process_ipv4 failed.\n");
-                        break;
-                    }
-                    int frame_len = sizeof(struct eth_hdr) + data_len;
-
-                    // Allocate buffer for the full Ethernet frame
-                    unsigned char *full_frame = (unsigned char *)malloc(frame_len);
-                    if (!full_frame) {
-                        perror("malloc full_frame");
-                        exit(1);
-                    }
-
-                    // Copy Ethernet header from original packet and swap MAC addresses
-                    struct eth_hdr *new_eth = (struct eth_hdr *)full_frame;
-                    memcpy(new_eth->h_dest, orig_eth->h_source, 6);   
-                    memcpy(new_eth->h_source, orig_eth->h_dest, 6);    
-                    new_eth->h_proto = htons(ETHERTYPE_IPV4);    
-
-                    // Copy the IP packet
-                    memcpy(full_frame + sizeof(struct eth_hdr), data, data_len);
-                    free(data);
-                    write_pcap(full_frame, frame_len);    // have to ntohs as we already wrote the total len in network byte order
-                    free(full_frame);
-                    break;
-                case ETHERTYPE_ARP:
-                    print_arp((struct arp_ipv4_hdr *)(in_packet + sizeof(struct eth_hdr)));
-                    break;
-                default:
-                    break;
+		    ret = process_ethernet(in_packet, iov_cnt);
+            if (ret < 0) {
+                fprintf(stderr, "process_ethernet failed.\n");
+                break;
             }
-        }
+            write_pcap();
+        } 
 	}
 }
 

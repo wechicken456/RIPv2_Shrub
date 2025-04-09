@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "string.h": "c",
+        "tcp.h": "c",
+        "ipv4.h": "c",
+        "icmp.h": "c"
+    }
+}

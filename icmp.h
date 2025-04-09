@@ -15,5 +15,11 @@ struct icmp_hdr {
 
 
 void print_icmp(struct icmp_hdr *icmp_packet);
-unsigned char* process_icmp(struct icmp_hdr *icmp_packet, int pkt_len, int *reply_pkt_size);
+
+/* return an integer indicating the length of the ICMP packet (header + data).
+ * This implementation is necessary in case the lower layer protocols (e.g. IPv4) need the ICMP packet size.
+ * write the reply packet to iov[iov_idx]
+ * where iov_idx (defined in `main.c`, included in `include.h`) is the index of the iov array to which the REPLY ICMP packet will be written. 
+ */
+int process_icmp(unsigned char *icmp_packet, int pkt_len, int iov_idx);
 #endif
