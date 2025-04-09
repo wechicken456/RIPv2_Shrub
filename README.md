@@ -402,7 +402,6 @@ ping 172.31.128.2
 ```
 
 TODO: explain the replacements for `<twig source directory>`
-TODO: resolve response duplication...
 TODO: fix symbolic link command with better explanation to say how and why to do it
 	also make sure that it's clear how to do it if your structure looks different or you already have a symlink.
 TODO: add cleanup commands (how to remove the ip route, how to shut down the docker network)
