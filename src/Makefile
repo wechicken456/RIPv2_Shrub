@@ -2,9 +2,9 @@ CXX=gcc
 CC=gcc
 CPPFLAGS=-Wall -Werror -O2
 
-SOCKET_TIME=socket_time
-SOCKET_TIME_SRC=$(SOCKET_TIME).c
-SOCKET_TIME_OBJ=$(SOCKET_TIME).o
+SOCKET_TIME_TARGET=socket_time
+SOCKET_TIME_SRC=$(SOCKET_TIME_TARGET).c
+SOCKET_TIME_OBJ=$(SOCKET_TIME_TARGET).o
 
 TARGET=twig
 SRCS=${wildcard *.c}
@@ -12,8 +12,11 @@ MAIN_SRCS=$(filter-out $(SOCKET_TIME_SRC), $(SRCS))
 MAIN_OBJECTS=${MAIN_SRCS:.c=.o} # compile all .c except socket_time.c
 HEADERS=${wildcard *.h}
 
+all: $(TARGET) $(SOCKET_TIME) create_symlink
 
-all: $(TARGET) $(SOCKET_TIME)
+create_symlink: $(TARGET) $(SOCKET_TIME_TARGET)
+	ln -fs $(shell pwd)/$(TARGET) ../$(TARGET) 
+	ln -fs $(shell pwd)/$(SOCKET_TIME_TARGET) ../$(SOCKET_TIME_TARGET)
 
 # Link main program (all .c except socket_time.c)
 $(TARGET): $(MAIN_OBJECTS) 

@@ -1,3 +1,12 @@
+# Build instruction
+```bash
+cd src
+make
+cd ..
+# follow testing instructions in README.md
+```
+
+
 # Byte order
 
 The most confusing part so far.
