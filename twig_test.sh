@@ -103,7 +103,7 @@ fi
 
 ## start the shim - this will take posession of the shell until you kill it.
 
-sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}" -d -d # -d #(feel free to add -d to enable debugging output.)
+sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}" -d  # -d #(feel free to add -d to enable debugging output.)
 
 exit 0
 
