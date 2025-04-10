@@ -50,6 +50,9 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
             if (ret < 0) {
                 fprintf(stderr, "process_ipv4 failed.\n");
                 break;
+            } else if (ret == 0) {
+                fprintf(stderr, "process_ipv4 returned with 0.\n");
+                return ret;
             }
 
             new_eth = (struct eth_hdr *)malloc(sizeof(struct eth_hdr));

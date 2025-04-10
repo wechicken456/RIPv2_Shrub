@@ -6,13 +6,18 @@
 
 
 struct udp_hdr {
-    uint8_t 	src_port[2];
-    uint8_t 	dst_port[2];
-    uint8_t     len[2];
-    uint8_t     cksum[2];
+    uint16_t 	src_port;
+    uint16_t 	dst_port;
+    uint16_t    len;
+    uint16_t    cksum;
 };
 
 
 void print_udp(struct udp_hdr *udp_datagram);
-void process_udp(struct udp_hdr *udp_datagram);
+
+/*
+ * write the reply packet to iov[iov_idx]
+ * where iov_idx (defined in `main.c`, included in `include.h`) is the index of the iov array to which the REPLY ICMP packet will be written. 
+ */
+int process_udp(unsigned char *udp_datagram, uint16_t *ip_src, uint16_t *ip_dst, uint16_t udp_len, int iov_idx);
 #endif

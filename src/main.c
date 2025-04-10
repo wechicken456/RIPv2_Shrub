@@ -34,7 +34,7 @@ struct pcap_pkthdr {
 };
 
 char tcp_flag_string[] = "FSRPAU"; 
-uint32_t host_ipv4_addr;
+uint32_t my_ipv4_addr;
 int debug = 0;
 int resolveDNS = 1;
 int reverseEndian = 0;
@@ -67,7 +67,7 @@ void write_pcap() {
 
     /* calculate the total length of the PCAP packet */
     unsigned int total_len = 0;
-    for (int i = 0 ; i < iov_cnt; i++) total_len += iov[i].iov_len;
+    for (int i = 1 ; i < iov_cnt; i++) total_len += iov[i].iov_len;
 
     pcap_hdr->ts_secs = tv.tv_sec;
     pcap_hdr->ts_usecs = tv.tv_usec;
@@ -83,8 +83,6 @@ void write_pcap() {
         perror("writev");
         return;
     }
-    /* move the read pointer to after this pcap file */
-    lseek(pcap_fd_read, total_len, SEEK_CUR);
 
     /* reset the iov array */
     for (int i = 0 ; i < iov_cnt; i++) {
@@ -100,7 +98,7 @@ void setup(char *filename) {
     // get pcap filename in the form X.X.X.0_masklength first, then open pcap it
     int l = strlen(filename);
     char *_filename = (char*)malloc(l + 6);
-    if (get_ip_and_filename(filename, _filename, &host_ipv4_addr) != 0) {
+    if (get_ip_and_filename(filename, _filename, &my_ipv4_addr) != 0) {
         exit(123);
     }
     pcap_fd_read = open(_filename, O_RDONLY);
@@ -154,10 +152,21 @@ void loop() {
 		/* read the pcap_packet_header, then print as requested */
         struct pcap_pkthdr pph;
         int ret = read(pcap_fd_read, &pph, sizeof(pph));
+
+        /* get cur pos in read */
+        off_t cur_pos = lseek(pcap_fd_read, 0, SEEK_CUR);
+        if (cur_pos == -1) {
+            perror("lseek");
+            exit(1);
+        }
+
         if (ret < 0) {
             perror("read");
             exit(1);
-        } else if (ret == 0) continue;    // EOF
+        } else if (ret == 0) {       // EOF, wait a little bit before trying again            
+            usleep(10000);
+            continue;   
+        }
         else if (ret < (int)sizeof(pph)) {
             printf("truncated packet header: only %d bytes\n", ret);
             exit(1);
@@ -205,6 +214,9 @@ void loop() {
             if (ret < 0) {
                 fprintf(stderr, "process_ethernet failed.\n");
                 break;
+            } else if (ret == 0) {
+                fprintf(stderr, "process_ethernet returned with 0.\n"); 
+                continue;
             }
             write_pcap();
         } 

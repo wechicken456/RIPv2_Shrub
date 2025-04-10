@@ -25,8 +25,8 @@ For **checksums**:
 1. Calculation: the checksum is calculated **AFTER** converting all other fields into NETWORK BYTE ORDER. Then the checksum ITSELF is stored, without caring about endianness. 
 2. Verification: verify checksum BEFORE converting anything host byte order. i.e. Leave everything alone and check the checksum.
 3. ICMP checksum is calculated over the ENTIRE ICMP packet, not just the header.
-4. IPv4 checksum is calcaulated over ONLY the IPv4 HEADER.
-
+4. IPv4 checksum is calculated over ONLY the IPv4 HEADER.
+5. UDP checksum is calculated from pseudo IPv4 header, UDP header, and UDP data. [RFC](https://www.ietf.org/rfc/rfc768.txt)
 
 # Header lengths
 

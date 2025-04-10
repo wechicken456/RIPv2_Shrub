@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <stdio.h>
 #include <sys/uio.h>
+#include <time.h>
 
 #define PCAP_MAGIC_LITTLE         0xa1b2c3d4
 #define PCAP_MAGIC_BIG            0xd4c3b2a1
@@ -28,13 +29,16 @@
 #define IPV4_TYPE_ICMP 0x1
 #define ICMP_TYPE_ECHO 0x8
 #define ICMP_TYPE_ECHO_REPLY 0x0
+#define UDP_PORT_ECHO 7
+#define UDP_PORT_TIME 37
+#define UNIX_TO_1900_EPOCH_OFFSET 2208988800UL
 
 typedef int32_t bpf_int32;
 typedef u_int32_t bpf_u_int32;
 
 
 extern char tcp_flag_string[]; 
-extern uint32_t host_ipv4_addr;
+extern uint32_t my_ipv4_addr;
 extern int debug;
 extern int resolveDNS;
 extern int reverseEndian;

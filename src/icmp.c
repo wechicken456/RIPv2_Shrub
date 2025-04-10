@@ -18,7 +18,6 @@ int process_icmp(unsigned char *icmp_packet, int pkt_len, int iov_idx) {
     struct icmp_hdr *hdr = (struct icmp_hdr *)icmp_packet;
     print_icmp(hdr);
 
-    // write replyonse to pcap file. 
     if (hdr->type == ICMP_TYPE_ECHO) {
         if (verify_cksum(hdr, sizeof(struct icmp_hdr))) {   // S + ~S === 0xFFFF
             fprintf(stderr, "[!] INVALID ICMP CHECKSUM.\n");
@@ -55,7 +54,7 @@ int process_icmp(unsigned char *icmp_packet, int pkt_len, int iov_idx) {
         printf("Received ICMP reply: \n");
         print_icmp(hdr);
     } else {
-        printf("Sorry, we only support ICMP echo and echo replyonses right now :(");
+        printf("Sorry, we only support ICMP echo and echo replies right now :(");
     }
     return -1;
 }

@@ -15,6 +15,12 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     uint8_t *src_addr = (uint8_t *)&(hdr->src_addr);
     uint8_t *dst_addr = (uint8_t *)&(hdr->dst_addr);
     
+    /* if not meant for us, discard it */
+    if (ntohl(*(uint32_t*)&hdr->dst_addr) != my_ipv4_addr) {
+        printf("process_ipv4: Not for us...\n");
+        return 0;
+    }
+
     // verify IPv4 checksum
     if (verify_cksum(hdr, ipv4_hdr_len)) {   // S + ~S === 0
         fprintf(stderr, "[!] INVALID IPv4 CHECKSUM.\n");
@@ -55,8 +61,36 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             break;
         case IPV4_TYPE_UDP:
             printf("(UDP)\n");
-            process_udp((struct udp_hdr *)(hdr + ipv4_hdr_len)); 
-            break;
+            ret = process_udp(in_packet + ipv4_hdr_len, (uint16_t*)hdr->src_addr, (uint16_t*)hdr->dst_addr, hdr->total_len - ipv4_hdr_len, iov_idx + 1); 
+            if (ret < 0) {
+                return ret;
+            }
+            
+            // allocate buffer for the IPv4 header. 
+            reply_iph_size = sizeof(struct ipv4_hdr);
+            reply_iph = (struct ipv4_hdr *)malloc(reply_iph_size);
+            if (reply_iph == NULL) {
+                perror("malloc");
+                return -1;
+            }
+            reply_iph->version_ihl = hdr->version_ihl;                               // Same header length 
+            reply_iph->type_of_service = hdr->type_of_service;                       // Copy ToS
+            reply_iph->total_len = htons(reply_iph_size + ret);                      // Total length = IPv4 header + UDP datagram   
+            reply_iph->frame_ident = htons(hdr->frame_ident + 1);                    // ID can be whatever 
+            reply_iph->fragment_offset = 0;                                       
+            reply_iph->time_to_live = 64;                                               // random TTL 
+            reply_iph->next_proto_id = IPPROTO_UDP;                                    // UDP 
+            memcpy(&reply_iph->src_addr, hdr->dst_addr, 4);                          // Swap src and dst addresses
+            memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
+            
+            // checksum is computed over ONLY the header as per RFC 791
+            reply_iph->hdr_checksum = in_cksum((unsigned short *)reply_iph, sizeof(*reply_iph), 0);
+            
+            iov[iov_idx].iov_base = (unsigned char*)reply_iph;
+            iov[iov_idx].iov_len = reply_iph_size;     
+            iov_cnt++; 
+            return reply_iph_size;
+
         case IPV4_TYPE_ICMP:
             printf("(ICMP)\n");
 
@@ -66,7 +100,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
                 return ret;
             }
 
-            // allocate buffer for the IPv4 + ICMP. 
+            // allocate buffer for the IPv4 header. 
             reply_iph_size = sizeof(struct ipv4_hdr);
             reply_iph = (struct ipv4_hdr *)malloc(reply_iph_size);
             if (reply_iph == NULL) {
@@ -75,7 +109,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             }
             reply_iph->version_ihl = hdr->version_ihl;                               // Same header length 
             reply_iph->type_of_service = hdr->type_of_service;                       // Copy ToS
-            reply_iph->total_len = htons(reply_iph_size) + ret;                         // Total length = IPv4 header + ICMP packet   
+            reply_iph->total_len = htons(reply_iph_size + ret);                         // Total length = IPv4 header + ICMP packet   
             reply_iph->frame_ident = htons(hdr->frame_ident + 1);                    // ID can be whatever 
             reply_iph->fragment_offset = 0;                                       
             reply_iph->time_to_live = 64;                                               // random TTL 
@@ -90,6 +124,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             iov[iov_idx].iov_len = reply_iph_size;     
             iov_cnt++; 
             return reply_iph_size;
+
         default:
             puts("");
             break;
