@@ -14,4 +14,4 @@ EXPOSE 7/udp
 
 # run twig test to start
 WORKDIR /usr/local/twig
-CMD ["./twig_test.sh" "&"]
+CMD ["./twig_test.sh"]

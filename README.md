@@ -1,12 +1,24 @@
 # CS 4440 Twig project tools
 
-## Tools list:
+## Outline 
+
+### Main Sections:
+- [Issues and Clarifications](README.md#issues-and-clarifications-ongoing-updates)
+- [Running Overview](README.md#running-overview)
+- [Running with Docker](README.md#running-with-docker)
+- [Testing](README.md#testing)
+
+### Tools:
 
 - [shim.py](README.md#shimpy)
 - [socket_time.c](README.md#socket_timec)
 - [udpping](README.md#udpping)
 - [make_pcap.sh](README.md#make_pcapsh)
 - [twig_test.sh](README.md#twig_testsh)
+
+- [docker_test.sh](README.md#docker_testsh)
+- [dockershim.sh](README.md#dockershimsh)
+
 
 ## Issues and Clarifications (ongoing updates)
 
@@ -38,9 +50,126 @@
 		sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}" -d
 		```
 		this will make it output a message and a packet summary every time it processes a packet from the pcap file.
-## Overview
+- **TODO:** Add support for multi-network setup behind the shim.
 
-**Now compatible with scapy Version 2.5.0 as well as 2.6.1**
+
+## Requirements
+
+Requirements are listed in **bold**, suggested optional software is *italicized*.
+
+### Without Docker
+
+- **Two machines**
+	- Root access on both
+	- Ability to establish one as the `next-hop` for select traffic from the other (typically means both are on the same LAN)
+- **ping**
+- **gcc**
+- **make**
+- **ip**
+- **Python 3.7+**
+	- **scapy 2.5.0+**
+	- **netifaces**
+- **bash**
+- **sudo**
+- **bc**
+- **xxd**
+- **ifconfig**
+- **libpcap**
+- *wireshark*
+
+### With Docker
+
+- **One machine**
+	- root access
+- **docker**
+- **ping**
+- **gcc**
+- **make**
+- **ip**
+- *wireshark*
+
+## Running Overview
+
+TO run in the scenario without docker, we will be using one machine to run `twig` and `shim.py`, and the other to send traffic using `ping`, `udpping`, or `socket_time`. 
+
+From now on, I will refer to the machine running the `twig` and `shim.py` as the *twig machine*, and the machine running `ping`, `udpping`, or `socket_time` as the *ping machine*. Any commands will be prefixed with `twig:` or `ping:` to represent which machine they are to be run on.
+
+### Setup
+
+We will start by establishing routes from the *ping machine* to the twigs on the *twig machine*. First we need the IP address of the *twig machine*, which can be obtained using the `ip` command on the *twig machine*. 
+
+I.e. 
+```c
+twig: ip r | grep default
+default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600 
+```
+> Here, we see the address for our default interface is `192.168.1.42`
+
+Then on the *ping machine* we establish a route that will direct traffic intended for the twigs to our `twig machine`
+
+I.e.
+```c
+ping: sudo ip r add 172.31.128.0/24 via 192.168.1.42
+```
+
+Now we can start the shim and `twig` on the *twig machine* using 
+```
+twig: ./twig_test.sh
+```
+and in another terminal
+```
+twig: ./twig -i 172.31.128.2_24
+```
+
+---
+
+**NOTE: the first few packets are likely to get lost, similar to the issue listed in [Issues](README.md#issues-and-clarifications-ongoing-updates).**
+
+To make sure this doesnt affect our results, 
+
+run 
+```
+ping: ./socket_time 172.31.128.2
+^C
+```
+(the `^C` represents killing it with ctrl/command C)
+
+This sends a first packet to the shim which most likely will be lost, but will ensure future packets will not be.
+
+---
+
+Finally we can send traffic from our *ping machine*:
+```
+ping: ping 172.31.128.2
+```
+```
+ping: udpping 172.31.128.2
+```
+```
+ping: socket_time 172.31.128.2
+```
+
+### Repeat Running
+
+You can run `ping`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
+
+If you need to restart your twig, then also restart the shim, but no other action is needed.
+
+### Shutdown
+
+To fully shut down all components of this project and return everything to the original state, we need to do the following:
+
+- Kill the shim script
+- Kill twig
+- On the *ping machine*, run
+```
+sudo ip r del 172.31.128.0/24
+```
+
+
+<!--
+
+**Compatible with scapy Version 2.5.0+**
 
 To run a simple test using these tools, here are the steps:
 
@@ -61,7 +190,63 @@ chmod +x make_pcap.sh
 
 Also note that the capture file is not removed when the shim is stopped, this is to make it easier to review if your packets are correct or not, though `make_pcap.sh` or `twig_test.sh` *will **overwrite** existing files* if started with the same network configured. 
 
+
+-->
+
+
+## Running with Docker
+
+This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
+Additionally, docker allows us to have a strict environment and allow better portability across systems.
+
+### Setup
+
+For initial setup, we will build the necessary components to run our shim in docker and have routes to get to it appropriately. 
+
+To begin, open three terminals with this repository as the working directory.
+
+Start by running the `docker_test.sh` script:
+
+*__Note__: if you do __not__ want the ip route it adds and the docker network it creates to be removed when you stop the shim, __remove__ the `--rm` option.*
+```c
+./docker_test.sh --rm
+```
+
+Now, in a separate temrinal window, start twig:
+
+```c
+./twig -i 172.31.128.2_24
+```
+
+Finally we can send traffic from another terminal window:
+```
+ping 172.31.128.2
+```
+```
+udpping 172.31.128.2
+```
+```
+socket_time 172.31.128.2
+```
+
+
+### Shutdown commands
+
+If you chose not to provide the `--rm` option to the `docker_test.sh` script, you will need to run the following commands to remove the docker network and the ip route it adds.
+
+```c
+docker network remove twignet
+sudo ip route del 172.31.128.0/24
+```
+
+
 ## Testing
+
+***TESTING SECTION IS OUTDATED***
+
+**This testing section was written for the loopback version, which is now outdated. The only changes made are in the setup procedure, please follow the procedure in the [Running Overview](README.md#running-overview) or the [Running with Docker](README.md#running-with-docker) sections**
+
+
 
 This section will detail exactly how to run tests that check basic functionality for your twig program.
 
@@ -373,67 +558,47 @@ To use a new network address from the default, edit the script to use your chose
 
 **NOTE: This script will prompt for password since you need root to run the shim.**
 
-### Requirements
-
 This script has all the requirements to run shim, and additionally uses lots of BASH specific expansions such as the arithmetic expansion notation `$(( <expr> ))`.
 
-## Docker Container Runtime (WIP)
 
-With the new modifications made to the shim for it to be functional on macos, and the future movement to reduce the strict filters in place on incoming traffic to allow multiple subnets behind the single shim, we've built a docker based arrangement to run your twig and the shim inside of.
+## docker_test.sh
 
-This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
-Additionally, docker allows us to have a strict environment and allow better portability across systems.
+### Description
 
-### Startup commands (WIP)
+This script 
+- Builds a docker image with all the prerequisites to run the shim
+- Constructs a docker network to host the shim container
+- Adds an ip route to direct traffic for the shim to the docker container
+- Starts the docker container using the image it made, mounting the local directory, and starting the `twig_test.sh` script which runs the shim. 
+- Removes the container on exit
+- **IF PROVIDED WITH `--rm`**, it additionally: 
+	- Removes the created docker network on exit
+	- Removes the added ip route on exit
 
-This setup requires Docker.
+To close down the shim and container this script starts, simply use `ctrl+d` or `ctrl+c` in the terminal it is running in*.
 
-To begin, open three terminals with this repository as the working directory.
+(*) - see [Issues and Clarifications](README.md#issues-and-clarifications-ongoing-updates)
 
-#### Initial setup
+If `--rm` is provided as an additional argument to this script when started, it will remove the docker network and ip route it creates on exit.
 
-for initial setup, we will build the necessary components to run our shim in docker and have routes to get to it appropriately. 
+To use new parameters from the default, edit the script to use your chosen values, but be warned that modifying any of the network addresses will require changing the addresses in all commands which reference them.
 
-Start by running the following sequence of commands:
-
-```c
-docker build -t twigimage .
-docker network create --subnet=172.31.127.0/24 twignet
-sudo ip route add 172.31.128.0/24 via 172.31.127.254
-```
-*add these to a script maybe? ...*
-
-*also can update the dockerfile to have a startup command, add `docker run` to the `twig_test.sh` and move the shim startup into a new script which is just run by the container.*
-
-Now with setup completed, we move to actually running tests. these tests can be completed any number of times without needing to redo the startup steps (unless you reboot or similar).
-
-#### Terminal 1 (indented means inside the container):
-```c
-docker run --name twigcontainer --net twignet --ip 172.31.127.254 --mount type=bind,src=.,dst=/usr/local/twig --rm -it twigimage bash
-	./twig_test.sh
-```
-
-#### Terminal 2
-```c
-./twig -i 172.31.128.2_24
-```
-
-#### Terminal 3
-```c
-ping 172.31.128.2
-```
-
-### Shutdown commands
-```c
-docker network del twignet
-sudo ip route del 172.31.128.0/24
-```
-simply running `exit` in the container after stopping the twig_test stops your shell instance and deletes the container.
+**NOTE: This script will prompt for password since you need root to make ip routes**
 
 
-**TODO:** Explain the replacements for `<twig source directory>`
+## dockershim.sh
 
-**TODO:** Fix symbolic link command with better explanation to say how and why to do it
-	also make sure that it's clear how to do it if your structure looks different or you already have a symlink.
+### Description
 
-**TODO:** Add support for multi-network setup behind the shim.
+This script 
+- Starts a docker container using the image it made, mounting the local directory, and starting the `twig_test.sh` script which runs the shim. 
+- Removes the container on exit
+
+
+To close down the shim and container this script starts, simply use `ctrl+d` or `ctrl+c` in the terminal it is running in*.
+
+(*) - see [Issues and Clarifications](README.md#issues-and-clarifications-ongoing-updates)
+
+To use new parameters from the default, edit the script to use your chosen values, but be warned that modifying any of the network addresses will require changing the addresses in all commands which reference them.
+
+This script is provided for use mostly for cases where the shim may need restarted frequently and it is easier to manually do the docker image, docker network, and ip route setup and shutdown than to let the `docker_test.sh` script do it for you. Most of these cases are debugging for now, but once your twig becomes a shrub router, this will be more likely to be used. (and there will be additional instructions to go along with it.) 
