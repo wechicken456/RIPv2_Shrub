@@ -41,6 +41,12 @@
 		./twig_test.sh -w
 		```
 		Note that this wireshark window will need to be closed manually, as it does not close when the shim is killed.
+		
+		Also note that when running with docker, this wont work, you'll instead need to start a tailing wireshark capture yourself using a command like so:
+		```
+			tail -f -c +0 172.31.128.0_24.dmp | wireshark -k -i -
+		```
+		
 	- For debugging if the shim is seeing your packets or is missing them, you can add `-d` or `-dd` to the line which runs the shim in `twig_test.sh` i.e. change
 		```
 		sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}"
