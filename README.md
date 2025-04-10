@@ -410,7 +410,6 @@ Now with setup completed, we move to actually running tests. these tests can be 
 #### Terminal 1 (indented means inside the container):
 ```c
 docker run --name twigcontainer --net twignet --ip 172.31.127.254 --mount type=bind,src=.,dst=/usr/local/twig --rm -it twigimage bash
-	ln -s ../twigsrc/twig twig
 	./twig_test.sh
 ```
 
