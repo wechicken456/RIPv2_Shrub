@@ -384,24 +384,57 @@ With the new modifications made to the shim for it to be functional on macos, an
 This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
 Additionally, docker allows us to have a strict environment and allow better portability across systems.
 
-commands (WIP)
-```
+### Startup commands (WIP)
+
+This setup requires Docker.
+
+To begin, open three terminals with this repository as the working directory.
+
+#### Initial setup
+
+for initial setup, we will build the necessary components to run our shim in docker and have routes to get to it appropriately. 
+
+Start by running the following sequence of commands:
+
+```c
 docker build -t twigimage .
 docker network create --subnet=172.31.127.0/24 twignet
 sudo ip route add 172.31.128.0/24 via 172.31.127.254
+```
+*add these to a script maybe? ...*
 
-docker run --name twigcontainer --net twignet --ip 172.31.127.254 --mount type=bind,src=<twig source directory>,dst=/usr/local/twigsrc --mount type=bind,src=.,dst=/usr/local/twig --rm -it twigimage bash
+*also can update the dockerfile to have a startup command, add `docker run` to the `twig_test.sh` and move the shim startup into a new script which is just run by the container.*
+
+Now with setup completed, we move to actually running tests. these tests can be completed any number of times without needing to redo the startup steps (unless you reboot or similar).
+
+#### Terminal 1 (indented means inside the container):
+```c
+docker run --name twigcontainer --net twignet --ip 172.31.127.254 --mount type=bind,src=.,dst=/usr/local/twig --rm -it twigimage bash
 	ln -s ../twigsrc/twig twig
 	./twig_test.sh
+```
 
-docker exec -it twigcontainer bash
-	./twig -i 172.31.128.2_24
+#### Terminal 2
+```c
+./twig -i 172.31.128.2_24
+```
 
-
+#### Terminal 3
+```c
 ping 172.31.128.2
 ```
 
-TODO: explain the replacements for `<twig source directory>`
-TODO: fix symbolic link command with better explanation to say how and why to do it
+### Shutdown commands
+```c
+docker network del twignet
+sudo ip route del 172.31.128.0/24
+```
+simply running `exit` in the container after stopping the twig_test stops your shell instance and deletes the container.
+
+
+**TODO:** Explain the replacements for `<twig source directory>`
+
+**TODO:** Fix symbolic link command with better explanation to say how and why to do it
 	also make sure that it's clear how to do it if your structure looks different or you already have a symlink.
-TODO: add cleanup commands (how to remove the ip route, how to shut down the docker network)
+
+**TODO:** Add support for multi-network setup behind the shim.
