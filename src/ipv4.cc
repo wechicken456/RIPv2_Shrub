@@ -12,8 +12,7 @@
 int process_ipv4(unsigned char *in_packet, int iov_idx) {
     struct ipv4_hdr *hdr = (struct ipv4_hdr *)in_packet;
     unsigned int ipv4_hdr_len = (hdr->version_ihl & 0b1111) << 2;
-    uint8_t *src_addr = (uint8_t *)&(hdr->src_addr);
-    uint8_t *dst_addr = (uint8_t *)&(hdr->dst_addr);
+
     
     /* if not meant for us, discard it */
     if (ntohl(*(uint32_t*)&hdr->dst_addr) != my_ipv4_addr) {
@@ -33,21 +32,23 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     hdr->frame_ident = ntohs(hdr->frame_ident); 
     hdr->total_len = ntohs(hdr->total_len);
 
-    printf("\tIP:	Vers:	%u\n", (hdr->version_ihl >> 4));
-    printf("\t\tHlen:	%u bytes\n", ipv4_hdr_len);
-    printf("\t\tSrc:\t%d.%d.%d.%d\t", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
-    if (resolveDNS) print_hostname(src_addr);
-    puts("");
-    printf("\t\tDest:\t%d.%d.%d.%d\t", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
-    if (resolveDNS) print_hostname(dst_addr);
-    puts("");
-    printf("\t\tTTL:\t%u\n", hdr->time_to_live);
-    printf("\t\tFrag Ident:\t%u\n", hdr->frame_ident);
-    printf("\t\tFrag Offset:\t%u\n", (hdr->fragment_offset & 0b1111111111111) << 3);
-    printf("\t\tFrag DF:\t%s\n", ((hdr->fragment_offset >> 13) & 0b010) ? "yes" : "no");
-    printf("\t\tFrag MF:\t%s\n", ((hdr->fragment_offset >> 13) & 0b001) ? "yes" : "no");
-    printf("\t\tIP CSum:\t%u\n", hdr->hdr_checksum);
-    printf("\t\tType:\t0x%x\t", hdr->next_proto_id);
+    // uint8_t *src_addr = (uint8_t *)&(hdr->src_addr);
+    // uint8_t *dst_addr = (uint8_t *)&(hdr->dst_addr);
+    // printf("\tIP:	Vers:	%u\n", (hdr->version_ihl >> 4));
+    // printf("\t\tHlen:	%u bytes\n", ipv4_hdr_len);
+    // printf("\t\tSrc:\t%d.%d.%d.%d\t", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+    // if (resolveDNS) print_hostname(src_addr);
+    // puts("");
+    // printf("\t\tDest:\t%d.%d.%d.%d\t", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
+    // if (resolveDNS) print_hostname(dst_addr);
+    // puts("");
+    // printf("\t\tTTL:\t%u\n", hdr->time_to_live);
+    // printf("\t\tFrag Ident:\t%u\n", hdr->frame_ident);
+    // printf("\t\tFrag Offset:\t%u\n", (hdr->fragment_offset & 0b1111111111111) << 3);
+    // printf("\t\tFrag DF:\t%s\n", ((hdr->fragment_offset >> 13) & 0b010) ? "yes" : "no");
+    // printf("\t\tFrag MF:\t%s\n", ((hdr->fragment_offset >> 13) & 0b001) ? "yes" : "no");
+    // printf("\t\tIP CSum:\t%u\n", hdr->hdr_checksum);
+    // printf("\t\tType:\t0x%x\t", hdr->next_proto_id);
     
     
     struct ipv4_hdr *reply_iph = NULL;

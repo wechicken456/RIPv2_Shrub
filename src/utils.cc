@@ -61,6 +61,8 @@ int get_ip_and_filename(char *in_str, char *out_filename, uint32_t *out_ipv4_add
     char *input_copy = strdup(in_str);
     
     char *ip_addr_end = strchr(input_copy, (int)'_');
+    char *_mask_length = ip_addr_end + 1;
+    mask_length = atoi(_mask_length);
     if (ip_addr_end != NULL) {         
         *ip_addr_end = '\0'; // now input_copy is '_' -truncated
         if (ip_string_to_uint(input_copy, out_ipv4_addr) != 0) {    // extract host ip address, also check if the provided X.X.X.Y is valid IP string

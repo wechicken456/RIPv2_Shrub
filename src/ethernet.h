@@ -4,7 +4,7 @@
 #include "include.h"
 #include "ipv4.h"
 #include "utils.h"
-
+#include <map>
 struct eth_hdr {
     uint8_t  h_dest[6];   /* destination eth addr */
     uint8_t  h_source[6]; /* source ether addr    */
@@ -22,6 +22,8 @@ struct arp_ipv4_hdr {
     uint8_t     tha[6];
     uint8_t     tpa[4];
 };
+
+extern std::map<uint32_t, uint32_t> arp_cache;
 
 void print_ethernet(struct eth_hdr *peh);
 void print_arp(struct arp_ipv4_hdr *arp_frame);

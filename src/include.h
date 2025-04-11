@@ -39,6 +39,7 @@ typedef u_int32_t bpf_u_int32;
 
 extern char tcp_flag_string[]; 
 extern uint32_t my_ipv4_addr;
+extern uint32_t mask_length;
 extern int debug;
 extern int resolveDNS;
 extern int reverseEndian;

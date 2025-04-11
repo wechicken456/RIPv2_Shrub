@@ -71,6 +71,7 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
 
     switch (ntohs(hdr->dst_port)) {
         case UDP_PORT_ECHO: // echo
+        {
             hdr->cksum = 0;
             hdr->len = htons(udp_len);
             hdr->dst_port = hdr->src_port;
@@ -82,9 +83,9 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             iov[iov_idx].iov_len = udp_len;
             iov_cnt++;
             return udp_len;
-
+        }
         case UDP_PORT_TIME: // time protocol
-
+        {
             int reply_len = sizeof(struct udp_hdr) + 4;
             unsigned char *reply = (unsigned char*)malloc(reply_len); // 4 bytes for the time in the data
             struct udp_hdr *reply_hdr = (struct udp_hdr *)reply;
@@ -101,6 +102,8 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             iov[iov_idx].iov_len = reply_len;
             iov_cnt++;
             return reply_len;
+        }
+           
         default:
             fprintf(stderr, "[!] Received port %d... Only support UDP echo at this time...\n", ntohs(hdr->dst_port));
             return -1;

@@ -34,6 +34,8 @@ void print_arp(struct arp_ipv4_hdr *arp_frame) {
     if (arp_frame->hlen_plen[1] == 4) print_addr_4(arp_frame->tpa);
     else print_addr_6(arp_frame->tpa);
     puts("\t");
+
+    //arp_cache[*(uint32_t*)orig_eth->h_source] = *(uint32_t*)iph->src_addr;  // both in key and val network byte order
 }
 
 int process_ethernet(unsigned char *in_packet, int iov_idx) {

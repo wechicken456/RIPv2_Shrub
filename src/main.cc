@@ -3,6 +3,7 @@
 #include "ipv4.h"
 #include "utils.h"
 #include "ethernet.h"
+#include <map>
 /* this normally comes from the pcap.h header file, but we'll just be using
  * a few specific pieces, so we'll add them here
  *
@@ -35,6 +36,7 @@ struct pcap_pkthdr {
 
 char tcp_flag_string[] = "FSRPAU"; 
 uint32_t my_ipv4_addr;
+uint32_t mask_length;
 int debug = 0;
 int resolveDNS = 1;
 int reverseEndian = 0;
@@ -54,19 +56,23 @@ struct pcap_file_header pfh;
 struct iovec iov[10];
 int iov_cnt = 0;
 
+/* MAC to IPv4 and IPv6 */
+std::map<uint64_t, uint32_t> arp_cache_v4;
+std::map<uint64_t, uint64_t> arp_cache_v6;
+
 /* write pcap header + `len` bytes from `data` to the packet capture file `pcap_fd` */
 void write_pcap() {
     struct pcap_pkthdr *pcap_hdr = (struct pcap_pkthdr *)malloc(sizeof(struct pcap_pkthdr));
     // write the pcap header
     struct timeval tv;
-    int ret = gettimeofday(&tv, NULL);
+    long long ret = gettimeofday(&tv, NULL);
     if (ret == -1) {
         perror("gettimeofday");
         return;
     }
 
     /* calculate the total length of the PCAP packet */
-    unsigned int total_len = 0;
+    long long total_len = 0;
     for (int i = 1 ; i < iov_cnt; i++) total_len += iov[i].iov_len;
 
     pcap_hdr->ts_secs = tv.tv_sec;
@@ -189,6 +195,10 @@ void loop() {
             exit(1);
         }
         in_packet[ret] = '\0';
+        
+        if (debug) {
+            puts("[+] Received a packet.");
+        }
         if (reverseEndian) {
             reverse_assign(&pph.ts_secs, sizeof(pph.ts_secs));
             reverse_assign(&pph.ts_usecs, sizeof(pph.ts_usecs));
@@ -223,23 +233,45 @@ void loop() {
 	}
 }
 
-/* 
- * the output should be formatted identically to this command:
- *   tshark -T fields -e frame.time_epoch -e frame.cap_len -e frame.len -e eth.dst -e eth.src -e eth.type  -r ping.dmp
- */
+void print_help() {
+    printf("Usage: ./twig [-d] [-d] [-d] [-i] IPv4addr_masklength\n");
+    printf("\t-i:\t{IPv4addr}_{mask length} e.g. 192.168.1.10_24.\n");
+    printf("\t\tTwig should assume that it has IP address 192.168.1.10/24 on that interface and that it should use the following file for reading and writing packets: 192.168.1.0 24.dmp\n");
+    printf("\t-d:\tDebugging flag. Can be used up to 3 times to increase verbosity. e.g. ./twig -d -d -d -i 192.168.1.10_24.\n");
+    printf("\t-h:\tPrint this help message.\n");
+    exit(0);
+}
+
+
 int main(int argc, char *argv[])    
 {
-	char *filename;
+	char *filename = NULL;
+    if (argc < 2) {
+        fprintf(stderr, "No interface provided. Check -i option.\n");
+        print_help();
+        exit(99);
+    }
 
-	if (argc == 2) {
-		filename = argv[1];
-	} else if ((argc == 3) && (strcmp(argv[1],"-i") == 0)) {
-		resolveDNS = 0;
-		filename = argv[2];
-	} else {
-		fprintf(stdout,"Usage: %s [-i] IPv4addr_masklength\n", argv[0]);
-		exit(99);
-	}
+	for (int i = 1 ; i < argc; i++) {
+        if (strcmp(argv[i], "-d") == 0) {
+            debug++;
+        } else if (strcmp(argv[i], "-i") == 0) {
+            i++;
+            filename = argv[i];
+        } else if (strcmp(argv[i], "-h") == 0) {
+            print_help();
+            exit(0);
+        } else {
+            fprintf(stderr, "Unknown argument: %s\n", argv[i]);
+            print_help();
+            exit(99);
+        }
+    }
+    if (filename == NULL) {
+        fprintf(stderr, "No interface provided. Check -i option.\n");
+        print_help();
+        exit(99);
+    }
 	setup(filename);
     loop();
 }
