@@ -36,7 +36,7 @@ def sniff_iface(stop_threads, capfile, network):
 	## only operate on IPv4 packets whose destination is inside the pcap's network.
 
 	# sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"arp or (( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask })" )
-	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"( arp or ( udp or tcp or icmp )) and ( ether dst {iface_mac} or ether dst ff:ff:ff:ff:ff:ff ) " )
+	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"( arp or ( ( udp or tcp or icmp ) and dst net 172.31.0.0 mask 255.255.0.0 ) ) and ( ether dst {iface_mac} or ether dst ff:ff:ff:ff:ff:ff ) " )
 	
 def write_packetlist(capwriter, iface_mac, pkt):
 	## only accept packets which are intended for this interface, or those with broadcast.
@@ -75,9 +75,6 @@ def sniff_pcap(stop_threads, capfile, network):
 			## sniff a pkt from the capture file
 			pkt = capreader.recv()
 
-			# if pkt[Ether].src == "ff:00:00:00:00:ff":
-				## dont forward anything this shim sent into the file in the first place.
-				# continue
 			print(pkt.summary())
 			# if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
 				## if from this network and to this network, dont move it outside the pcap.
@@ -104,20 +101,9 @@ def sniff_pcap(stop_threads, capfile, network):
 				print("sending pkt", pkt.summary())
 
 			## write pkt out. specifying interface doesnt do anything.
-			# send(pkt.getlayer(IP), verbose=1, iface=args.iface)
-
-			# send(pkt.getlayer(IP), verbose=args.debug)
-			sendp(pkt, verbose=args.debug, iface=args.iface) # if using arp
-
-				# if L3RawSocket().send(pkt.getlayer(IP)) != None:#, verbose=args.debug)
-				# 	print(".\nSent 1 Packets")
-				# s.sendto(raw(pkt.getlayer(IP)), (pkt[IP].dst, 0))
-
-			## if using arp	
-			# elif ARP in pkt and ipaddress.ip_address(pkt[ARP].psrc) in network.network and not pkt[ARP].op == 1 :
-			# 	if(args.debug >0):
-			# 		print("sending arp pkt", pkt.summary())
-			# 	sendp(pkt, verbose=args.debug, iface=args.iface)
+			send(pkt.getlayer(IP), verbose=args.debug)
+			# pkt[Ether].src = iface_mac
+			# sendp(pkt, verbose=args.debug, iface=args.iface) # if using arp
 
 		except socket.error as e:
 			print(f"socket error: {e}")

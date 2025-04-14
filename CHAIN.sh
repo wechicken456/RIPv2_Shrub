@@ -3,10 +3,6 @@
 ## ARGUMENT PARSING
 for i in "$@"; do
 	case $i in
-		-m=*|--mac=*)
-			MACADDR="${i#*=}"
-			shift
-			;;
 		-d=*|--docker=*)
 			DOCKERIP="${i#*=}"
 			shift # past argument=value
@@ -33,14 +29,6 @@ EOF
 			;;
 	esac
 done
-
-
-if [[ -z "${MACADDR}" ]]; then
-	echo "-m|--mac must be specified. should be lowercase hex format mac address of the interface the outgoing packets from the shim will go to."
-	exit 0
-fi
-
-
 
 TOOLDIR=.
 PROGRAM="twig" ## allow specifying a different name for shub program.
@@ -153,7 +141,7 @@ ROUTER_5_IN="${INTERNAL_PREFIX5}.254_${MASKS}"
 # UDPPING_SERVER_ADDR="${PUBLIC_PREFIX}.254"
 #
 # Make the router chain
-CMDS1="${TOOLDIR}/${PROGRAM} ${DEBUG} ${RIP_INTERVAL_ARG} -i ${ROUTER_SHIM_IN} -i ${ROUTER_SHIM_OUT} --default-route ${ROUTER_SHIM_IN} ${MACADDR}"
+CMDS1="${TOOLDIR}/${PROGRAM} ${DEBUG} ${RIP_INTERVAL_ARG} -i ${ROUTER_SHIM_IN} -i ${ROUTER_SHIM_OUT} --default-route ${ROUTER_SHIM_IN}"
 CMDS2="${TOOLDIR}/${PROGRAM} ${DEBUG} ${RIP_INTERVAL_ARG} -i ${ROUTER_1_IN}    -i ${ROUTER_1_OUT}"
 CMDS3="${TOOLDIR}/${PROGRAM} ${DEBUG} ${RIP_INTERVAL_ARG} -i ${ROUTER_2_IN}    -i ${ROUTER_2_OUT}"
 CMDS4="${TOOLDIR}/${PROGRAM} ${DEBUG} ${RIP_INTERVAL_ARG} -i ${ROUTER_3_IN}    -i ${ROUTER_3_OUT}"
