@@ -15,6 +15,17 @@ import threading
 # conf.use_pcap = True
 # conf.L3socket = L3RawSocket # changed
 
+## assume mac addresses of the shrubs are formed as
+## fe:<ip octets in hex>:00
+## but how do we know what out next hop is?...
+def MAC_from_IP(ip):
+	mac = "fe:"
+	for octet in ip.split('.'):
+		mac += f":{octet:02x}"
+	mac += ":00"
+
+
+
 ## super slow and bulky...
 def sniff_iface(stop_threads, capfile, network):
 	capwriter = PcapWriter(capfile, append=True, sync=True) ## add endianness, snaplen, bufsize etc. 
@@ -24,44 +35,79 @@ def sniff_iface(stop_threads, capfile, network):
 	## sniff pkts
 	## only operate on IPv4 packets whose destination is inside the pcap's network.
 
-	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"arp or (( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask })" )
+	# sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"arp or (( udp or tcp or icmp ) and net { str(network.network).split('/')[0] } mask { network.netmask })" )
+	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"( arp or ( udp or tcp or icmp )) and ( ether dst {iface_mac} or ether dst ff:ff:ff:ff:ff:ff ) " )
 	
 def write_packetlist(capwriter, iface_mac, pkt):
 	## only accept packets which are intended for this interface, or those with broadcast.
-	if iface_mac != pkt[Ether].dst and pkt[Ether].dst != 'ff:ff:ff:ff:ff:ff':
-		if(args.debug > 1):
-			print("packet not for me, mac doesnt match...")
-		return
-	## reject incoming arp replies to prevent loops...
-	if ARP in pkt and pkt[ARP].op == 2:
+	# if iface_mac != pkt[Ether].dst and pkt[Ether].dst != 'ff:ff:ff:ff:ff:ff':
+	# 	if(args.debug > 2):
+	# 		print("packet not for me, mac doesnt match...")
+	# 	return
+	## reject incoming arp requests to prevent loops...
+	if ARP in pkt and pkt[ARP].op == 1:
 		return
 	## reject packets from the network in the file behind us.
 	## TODO: change to work with multi-network setups
-	if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
-		return 
+	# if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
+	# 	return 
+
+	if pkt[Ether].src.startswith("fe:"):
+		## dont forward packets from the inside of the network back into it
+		return
+
+	# pkt[Ether].src = "ff:00:00:00:00:ff"
+	## set to some default value...
+	## ideally, we  figure out who our neighbors are and use their real mac addresses...
+	# pkt[Ether].dst = "ff:00:00:00:00:ff"
+
+	# print(pkt.summary())
 	capwriter.write(raw(pkt))#, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
 	capwriter.flush()
 
 ## super slow and bulky...
 def sniff_pcap(stop_threads, capfile, network):
 	capreader = PcapReader(capfile)
+	iface_mac = netifaces.ifaddresses(args.iface)[netifaces.AF_LINK][0]['addr']
 	# s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
 	while(not stop_threads.is_set()):
 		try:
 			## sniff a pkt from the capture file
 			pkt = capreader.recv()
-			if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
+
+			# if pkt[Ether].src == "ff:00:00:00:00:ff":
+				## dont forward anything this shim sent into the file in the first place.
+				# continue
+			print(pkt.summary())
+			# if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
 				## if from this network and to this network, dont move it outside the pcap.
-				if ipaddress.ip_address(pkt[IP].src) in network.network and ipaddress.ip_address(pkt[IP].dst) in network.network:
-					continue
-				if(args.debug >0):
-					print("sending pkt", pkt.summary())
+			if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network and ipaddress.ip_address(pkt[IP].dst) in network.network:
+				print("didnt send packet internal to this network")
+				continue
+			if IP in pkt and ipaddress.ip_address(pkt[IP].dst) == ipaddress.ip_address("255.255.255.255"):
+				## temporary - prevent IP limited broadcast from going out from the pcap and looping. this is only an issue currently due to my messed up RIPv1 implementation from last year.
+				continue
+			if ARP in pkt and pkt[ARP].op == 2:
+				continue
 
-				## write pkt out. specifying interface doesnt do anything.
-				# send(pkt.getlayer(IP), verbose=1, iface=args.iface)
+			## do NOT forward packets from the outside interface back to it, and do not forward MAC broadcast packets out of our pcap network.
+			## also do NOT forward packets which do not have fe:... as their source adress. all packets sent from shrubs will have fe:... as sources.
+			if iface_mac == pkt[Ether].src or pkt[Ether].dst == 'ff:ff:ff:ff:ff:ff' or not pkt[Ether].src.startswith("fe:") :
+				if(args.debug > 2):
+					print("packet not for me, mac doesnt match...")
+				continue
 
-				send(pkt.getlayer(IP), verbose=args.debug)
-				# sendp(pkt, verbose=args.debug, iface=args.iface) # if using arp
+
+			if(args.debug  == 1 and IP in pkt):
+				print("sending pkt to", pkt[IP].dst)
+			elif(args.debug >1):
+				print("sending pkt", pkt.summary())
+
+			## write pkt out. specifying interface doesnt do anything.
+			# send(pkt.getlayer(IP), verbose=1, iface=args.iface)
+
+			# send(pkt.getlayer(IP), verbose=args.debug)
+			sendp(pkt, verbose=args.debug, iface=args.iface) # if using arp
 
 				# if L3RawSocket().send(pkt.getlayer(IP)) != None:#, verbose=args.debug)
 				# 	print(".\nSent 1 Packets")
