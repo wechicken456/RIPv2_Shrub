@@ -168,9 +168,13 @@ if [[ -z "${DRYRUN}" ]]; then
 fi
 #
 # CMDC="${TOOLDIR}/udpping -p 5  ${DEBUG} -i ${UDPPING_CLIENT} ${UDPPING_SERVER_ADDR}"
-CMDD="traceroute ${INTERNAL_PREFIX5}.254"
+CMDD="traceroute ${INTERNAL_PREFIX4}.254"
 # echo "Start UDPping client by typing:   ${CMDC}"
-echo "Traceroute to router 5 by typing:   ${CMDD}"
+echo "Traceroute to router 4 with:   ${CMDD}"
+
+CMDD="ping ${INTERNAL_PREFIX4}.254"
+echo "ping router 4 with:   ${CMDD}"
+
 # bash
 # ps | grep "${PROGRAM}" | awk '{ print $1 }' | xargs kill
 
