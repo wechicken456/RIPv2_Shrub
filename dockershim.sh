@@ -5,7 +5,7 @@ DNETNAME="twignet"
 DNETCIDR="172.31.127.0/24"
 DCONNAME="twigcontainer"
 DCONADDR="172.31.127.254"
-SHIMCIDR="172.31.128.0/24"
+SHIMCIDR="172.31.0.0/16"
 
 ## if no docker image with the name we're lookng for, make one.
 if [[ "$(docker images | grep \"${DIMGNAME}\" | wc -l)" -eq 0 ]] ; then

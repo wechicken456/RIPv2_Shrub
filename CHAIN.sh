@@ -34,6 +34,9 @@ EOF
 done
 
 
+SHIM_MAX_SUBNET="172.31.0.0"
+SHIM_MAX_MASK=16
+
 SHIM_PREFIX="172.31.128" ## network the shim uses as its file interface.
 INTERNAL_PREFIX1="172.31.1"
 INTERNAL_PREFIX2="172.31.2"
@@ -74,38 +77,34 @@ PCAP_NAME_5="${INTERNAL_PREFIX5}.0_${MASKS}.dmp"
 if [[ -z "${DRYRUN}" ]]; then
 	echo "Making pcaps"
 	./make_pcap.sh "${PCAP_NAME_SHIM}"
-	./make_pcap.sh "${PCAP_NAME_1}"
-	./make_pcap.sh "${PCAP_NAME_2}"
-	./make_pcap.sh "${PCAP_NAME_3}"
-	./make_pcap.sh "${PCAP_NAME_4}"
-	./make_pcap.sh "${PCAP_NAME_5}"
+
+	rm ${PCAP_NAME_1} ${PCAP_NAME_2} ${PCAP_NAME_3} ${PCAP_NAME_4} ${PCAP_NAME_5}
+	
+	# ./make_pcap.sh "${PCAP_NAME_1}"
+	# ./make_pcap.sh "${PCAP_NAME_2}"
+	# ./make_pcap.sh "${PCAP_NAME_3}"
+	# ./make_pcap.sh "${PCAP_NAME_4}"
+	# ./make_pcap.sh "${PCAP_NAME_5}"
 
 	if [[ -n "${DOCKERIP}" ]]; then
-		echo "Adding IP routes to docker container located at ip ${DOCKERIP}"
-		sudo ip route add "${SHIM_PREFIX}.0/${MASKS}" via "${DOCKERIP}"
-		sudo ip route add "${INTERNAL_PREFIX1}.0/${MASKS}" via "${DOCKERIP}"
-		sudo ip route add "${INTERNAL_PREFIX2}.0/${MASKS}" via "${DOCKERIP}"
-		sudo ip route add "${INTERNAL_PREFIX3}.0/${MASKS}" via "${DOCKERIP}"
-		sudo ip route add "${INTERNAL_PREFIX4}.0/${MASKS}" via "${DOCKERIP}"
-		sudo ip route add "${INTERNAL_PREFIX5}.0/${MASKS}" via "${DOCKERIP}"
+		echo "Adding IP route to docker container located at ip ${DOCKERIP}"
+		sudo ip route add "${SHIM_MAX_SUBNET}/${SHIM_MAX_MASK}" via "${DOCKERIP}"
 	fi
 else
 	echo "Printing commands which would be run:"
 	echo "./make_pcap.sh ${PCAP_NAME_SHIM}"
-	echo "./make_pcap.sh ${PCAP_NAME_1}"
-	echo "./make_pcap.sh ${PCAP_NAME_2}"
-	echo "./make_pcap.sh ${PCAP_NAME_3}"
-	echo "./make_pcap.sh ${PCAP_NAME_4}"
-	echo "./make_pcap.sh ${PCAP_NAME_5}"
+
+	echo "rm ${PCAP_NAME_1} ${PCAP_NAME_2} ${PCAP_NAME_3} ${PCAP_NAME_4} ${PCAP_NAME_5}"
+
+	# echo "./make_pcap.sh ${PCAP_NAME_1}"
+	# echo "./make_pcap.sh ${PCAP_NAME_2}"
+	# echo "./make_pcap.sh ${PCAP_NAME_3}"
+	# echo "./make_pcap.sh ${PCAP_NAME_4}"
+	# echo "./make_pcap.sh ${PCAP_NAME_5}"
 
 	if [[ -n "${DOCKERIP}" ]]; then
 		echo "Printing commands which would run to add IP routes to docker container located at ip ${DOCKERIP}"
-		echo "sudo ip route add ${SHIM_PREFIX}.0/${MASKS} via ${DOCKERIP}"
-		echo "sudo ip route add ${INTERNAL_PREFIX1}.0/${MASKS} via ${DOCKERIP}"
-		echo "sudo ip route add ${INTERNAL_PREFIX2}.0/${MASKS} via ${DOCKERIP}"
-		echo "sudo ip route add ${INTERNAL_PREFIX3}.0/${MASKS} via ${DOCKERIP}"
-		echo "sudo ip route add ${INTERNAL_PREFIX4}.0/${MASKS} via ${DOCKERIP}"
-		echo "sudo ip route add ${INTERNAL_PREFIX5}.0/${MASKS} via ${DOCKERIP}"
+		echo "sudo ip route add ${SHIM_MAX_SUBNET}.0/${SHIM_MAX_MASK} via ${DOCKERIP}"
 	fi
 fi
 
