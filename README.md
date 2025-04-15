@@ -1,4 +1,12 @@
-# CS 4440 Twig project tools
+# CS 4440 Twig/Shrub project tools
+
+This README details the tools available for the Twig and Shrub projects.
+`twig` is used to reference your program in all cases, even for the `shrub` project components.
+
+**NOTE: The testing section is outdated. For now, use the [CHAIN.sh](README.md#chainsh) section to test routing with your shrub.**
+
+*(This note will be removed once the testing section is up to date and completed.)*
+
 
 ## Outline 
 

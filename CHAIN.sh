@@ -1,5 +1,8 @@
 #!/bin/sh
 
+TOOLDIR=.
+PROGRAM="twig" ## allow specifying a different name for shub program.
+
 ## ARGUMENT PARSING
 for i in "$@"; do
 	case $i in
@@ -30,8 +33,6 @@ EOF
 	esac
 done
 
-TOOLDIR=.
-PROGRAM="twig" ## allow specifying a different name for shub program.
 
 SHIM_PREFIX="172.31.128" ## network the shim uses as its file interface.
 INTERNAL_PREFIX1="172.31.1"
