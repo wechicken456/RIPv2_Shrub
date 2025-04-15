@@ -4,6 +4,7 @@
 
 ### Main Sections:
 - [Issues and Clarifications](README.md#issues-and-clarifications-ongoing-updates)
+- [Requirements](README.md#requirements)
 - [Running Overview](README.md#running-overview)
 - [Running with Docker](README.md#running-with-docker)
 - [Testing](README.md#testing)
