@@ -122,11 +122,11 @@ default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600
 ```
 > Here, we see the address for our default interface is `192.168.1.42`
 
-Then on the *ping machine* we establish routes that will direct traffic intended for the twigs to our `twig machine`.
+Then on the *ping machine* we establish a route that will direct traffic intended for the twigs to our `twig machine`.
 
 I.e.
 ```c
-ping: sudo ip r add 172.31.128.0/24 via 192.168.1.42
+ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
 ```
 
 Now we can start the shim and `twig` on the *twig machine* using 
@@ -659,12 +659,7 @@ Then on the *ping machine* we establish routes that will direct traffic intended
 
 I.e.
 ```c
-ping: sudo ip r add 172.31.128.0/24 via 192.168.1.42
-ping: sudo ip r add 172.31.1.0/24 via 192.168.1.42
-ping: sudo ip r add 172.31.2.0/24 via 192.168.1.42
-ping: sudo ip r add 172.31.3.0/24 via 192.168.1.42
-ping: sudo ip r add 172.31.4.0/24 via 192.168.1.42
-ping: sudo ip r add 172.31.5.0/24 via 192.168.1.42
+ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
 ```
 
 Now we can start the shim and `twig`s on the *twig machine* using 

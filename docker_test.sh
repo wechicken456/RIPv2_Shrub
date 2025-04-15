@@ -5,7 +5,7 @@ DNETNAME="twignet"
 DNETCIDR="172.31.127.0/24"
 DCONNAME="twigcontainer"
 DCONADDR="172.31.127.254"
-SHIMCIDR="172.31.128.0/24"
+SHIMCIDR="172.31.0.0/16"
 
 ## if the first argument is --rm, then clean up the docker network and ip route when we're done.
 cleanup="$1"
