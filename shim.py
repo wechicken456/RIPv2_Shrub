@@ -15,15 +15,18 @@ import threading
 # conf.use_pcap = True
 # conf.L3socket = L3RawSocket # changed
 
-## assume mac addresses of the shrubs are formed as
-## fe:<ip octets in hex>:00
-## but how do we know what out next hop is?...
-def MAC_from_IP(ip):
-	mac = "fe:"
-	for octet in ip.split('.'):
-		mac += f":{octet:02x}"
-	mac += ":00"
+def dec_ttl(pkt):
+	if IP not in pkt:
+		return pkt
 
+	if args.debug > 1:
+		print(f"ttl: {pkt[IP].ttl} -> {pkt[IP].ttl-1}")
+	pkt[IP].ttl -= 1
+	if pkt[IP].ttl <= 0:	
+		## packet expired on interface, ignore
+		return None
+	del pkt[IP].chksum ## delete old checksum so it gets recalculated.
+	return pkt
 
 
 ## super slow and bulky...
@@ -39,28 +42,26 @@ def sniff_iface(stop_threads, capfile, network):
 	sniff(iface=args.iface, prn=lambda x: write_packetlist(capwriter, iface_mac, x), stop_filter=lambda _: stop_threads.is_set(), filter=f"( arp or ( ( udp or tcp or icmp ) and dst net 172.31.0.0 mask 255.255.0.0 ) ) and ( ether dst {iface_mac} or ether dst ff:ff:ff:ff:ff:ff ) " )
 	
 def write_packetlist(capwriter, iface_mac, pkt):
-	## only accept packets which are intended for this interface, or those with broadcast.
-	# if iface_mac != pkt[Ether].dst and pkt[Ether].dst != 'ff:ff:ff:ff:ff:ff':
-	# 	if(args.debug > 2):
-	# 		print("packet not for me, mac doesnt match...")
-	# 	return
+
+	pkt = dec_ttl(pkt)
+
+	## if the packet expired on the interface, dont forward it.
+	if(pkt == None):
+		return
+
+	if Ether not in pkt:
+		if args.debug:
+			print("non-ethernet packet ignored.")
+		return
+
 	## reject incoming arp requests to prevent loops...
 	if ARP in pkt and pkt[ARP].op == 1:
 		return
-	## reject packets from the network in the file behind us.
-	## TODO: change to work with multi-network setups
-	# if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:
-	# 	return 
 
 	if pkt[Ether].src.startswith("fe:"):
 		## dont forward packets from the inside of the network back into it
 		return
-
-	# pkt[Ether].src = "ff:00:00:00:00:ff"
-	## set to some default value...
-	## ideally, we  figure out who our neighbors are and use their real mac addresses...
-	# pkt[Ether].dst = "ff:00:00:00:00:ff"
-
+	
 	# print(pkt.summary())
 	capwriter.write(raw(pkt))#, linktype=1, ifname=args.iface) # apparently doesnt work for scapy 2.5.0  ¯\_(ツ)_/¯
 	capwriter.flush()
@@ -73,7 +74,18 @@ def sniff_pcap(stop_threads, capfile, network):
 	while(not stop_threads.is_set()):
 		try:
 			## sniff a pkt from the capture file
-			pkt = capreader.recv()
+
+			pkt = dec_ttl(capreader.recv())
+			# pkt = capreader.recv()
+
+			## if the packet expired on the interface, dont forward it.
+			if(pkt == None):
+				continue
+			
+			if Ether not in pkt:
+				if args.debug:
+					print("non-ethernet packet ignored.")
+				continue
 
 			print(pkt.summary())
 			# if IP in pkt and ipaddress.ip_address(pkt[IP].src) in network.network:

@@ -696,9 +696,6 @@ ping: socket_time 172.31.4.254
 ping: traceroute 172.31.4.254
 ```
 
-**NOTE: traceroute may be a little misleading, the first router seems not to be included in the results because forwarding by the shim doesnt reduce ttl.**
-
-
 #### Repeat Running
 
 You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
@@ -764,8 +761,6 @@ socket_time 172.31.4.254
 ```
 traceroute 172.31.4.254
 ```
-
-**NOTE: traceroute may be a little misleading, the first router seems not to be included in the results because forwarding by the shim doesnt reduce ttl.**
 
 
 #### Repeat Running
