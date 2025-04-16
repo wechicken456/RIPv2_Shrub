@@ -106,8 +106,10 @@ Requirements are listed in **bold**, suggested optional software is *italicized*
 - *wireshark*
 
 ## Running Overview
+<details>
+  <summary>Expand Running Overview</summary>
 
-TO run in the scenario without docker, we will be using one machine to run `twig` and `shim.py`, and the other to send traffic using `ping`, `udpping`, or `socket_time`. 
+To run in the scenario without docker, we will be using one machine to run `twig` and `shim.py`, and the other to send traffic using `ping`, `udpping`, or `socket_time`. 
 
 From now on, I will refer to the machine running the `twig` and `shim.py` as the *twig machine*, and the machine running `ping`, `udpping`, or `socket_time` as the *ping machine*. Any commands will be prefixed with `twig:` or `ping:` to represent which machine they are to be run on.
 
@@ -210,8 +212,15 @@ Also note that the capture file is not removed when the shim is stopped, this is
 
 -->
 
+  
+</details>
+
 
 ## Running with Docker
+
+<details>
+  <summary>Expand Running with Docker</summary>
+
 
 This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
 Additionally, docker allows us to have a strict environment and allow better portability across systems.
@@ -256,6 +265,8 @@ docker network remove twignet
 sudo ip route del 172.31.128.0/24
 ```
 
+  
+</details>
 
 ## Testing
 
@@ -263,6 +274,8 @@ sudo ip route del 172.31.128.0/24
 
 **This testing section was written for the loopback version, which is now outdated. The only changes made are in the setup procedure, please follow the procedure in the [Running Overview](README.md#running-overview) or the [Running with Docker](README.md#running-with-docker) sections**
 
+<details>
+  <summary>Expand Outdated Testing</summary>
 
 
 This section will detail exactly how to run tests that check basic functionality for your twig program.
@@ -468,9 +481,14 @@ Key components to make sure are correct:
 - Time appears incorrect despite a correct conversion method
 	- usually caused by a failure to convert the timestamp on to big endian within `twig`, or a failure to convert from the unix standard `1970` epoch to the [RFC 868](https://www.rfc-editor.org/rfc/rfc868.html) `1900` epoch
 
+</details>
+
 ## shim.py
+<details>
+  <summary>Expand</summary>
 
 ### Description
+
 The shim sits between the pcap file we use as an interface for twig and the real network. 
 
 The shim uses a direct forwarding mechanism, so we can only talk to things on the same local machine as the shim/twig. It also only forwards ipv4 packets which are
@@ -497,7 +515,12 @@ Installing `scapy` (and any other reported missing modules) will require either:
 
 **NOTE: running the shim requires root access since it is accessing your network interface to sniff for packets and is injecting packets 'sent' from the pcap file.**
 
+</details>
+
 ## socket_time.c
+<details>
+  <summary>Expand</summary>
+
 socket_time.c is a minimal client for the Time Protocol (udp port 37) specified by [RFC 868](https://www.rfc-editor.org/rfc/rfc868.html)
 
 Compile manually or using the built in `make` rules by running 
@@ -523,7 +546,12 @@ Converted to  a human readable format, it is
 Thursday, March 27, 2025 3:57:21 AM GMT
 ```
 
+</details>
+
 ## udpping
+<details>
+  <summary>Expand</summary>
+
 udpping is a basic client for the udp echo protocol.
 
 This client was written by Dr. Shawn Ostermann.
@@ -538,8 +566,12 @@ By default, testing with `udpping`  will send 1000 packets, and give a summary o
 
 Testing details to follow in [Testing](README.md#testing)
 
+</details>
 
 ## make_pcap.sh
+<details>
+  <summary>Expand</summary>
+
 
 This script serves to make an empty pcap file with some default header parameters.
 
@@ -557,7 +589,12 @@ e.g.
 
 or just use twig_test.sh to start the shim and make the pcap file at the same time.
 
+</details>
+
 ## twig_test.sh
+<details>
+  <summary>Expand</summary>
+
 
 ### Description
 
@@ -578,7 +615,12 @@ To use a new network address from the default, edit the script to use your chose
 This script has all the requirements to run shim, and additionally uses lots of BASH specific expansions such as the arithmetic expansion notation `$(( <expr> ))`.
 
 
+</details>
+
 ## docker_test.sh
+<details>
+  <summary>Expand</summary>
+
 
 ### Description
 
@@ -603,7 +645,12 @@ To use new parameters from the default, edit the script to use your chosen value
 **NOTE: This script will prompt for password since you need root to make ip routes**
 
 
+</details>
+
 ## dockershim.sh
+<details>
+  <summary>Expand</summary>
+
 
 ### Description
 
@@ -620,7 +667,12 @@ To use new parameters from the default, edit the script to use your chosen value
 
 This script is provided for use mostly for cases where the shim may need restarted frequently and it is easier to manually do the docker image, docker network, and ip route setup and shutdown than to let the `docker_test.sh` script do it for you. Most of these cases are debugging for now, but once your twig becomes a shrub router, this will be more likely to be used. (and there will be additional instructions to go along with it.) 
 
+</details>
+
 ## cleandocker.sh
+<details>
+  <summary>Expand</summary>
+
 
 ### Description
 
@@ -628,7 +680,12 @@ this script cleans up everything made by docker. specifically it deletes the ima
 
 if you change values in either of those scripts, you must also change the values in this script for it to clean correctly.
 
+</details>
+
 ## CHAIN.sh
+<details>
+  <summary>Expand</summary>
+
 
 ### Description
 
@@ -641,6 +698,10 @@ To actually use this script and test your program using it, there are several ch
 The following is a procedure to run using this script.
 
 ### Running without Docker
+
+<details>
+  <summary>Expand</summary>
+
 
 #### Setup
 
@@ -715,9 +776,12 @@ sudo ip r del 172.31.4.0/24
 sudo ip r del 172.31.5.0/24
 ```
 
-
+</details>
 
 ### Running with Docker
+
+<details>
+  <summary>Expand</summary>
 
 
 This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
@@ -776,11 +840,10 @@ ps | grep twig | awk '{ print $1 }' | xargs kill
 
 ./cleandocker.sh
 
-sudo ip route del 172.31.128.0/24
-sudo ip route del 172.31.1.0/24
-sudo ip route del 172.31.2.0/24
-sudo ip route del 172.31.3.0/24
-sudo ip route del 172.31.4.0/24
-sudo ip route del 172.31.5.0/24
+sudo ip route del 172.31.0.0/16
+
 ```
 
+
+</details>
+</details>
