@@ -3,6 +3,15 @@
 TOOLDIR=.
 PROGRAM="twig" ## allow specifying a different name for shub program.
 
+#
+# enable debugging if requested
+#DEBUG="-d -d"
+#DEBUG="-d"
+DEBUG=""
+
+RIP_INTERVAL_ARG="-r 1"
+
+
 ## ARGUMENT PARSING
 for i in "$@"; do
 	case $i in
@@ -79,7 +88,7 @@ if [[ -z "${DRYRUN}" ]]; then
 	./make_pcap.sh "${PCAP_NAME_SHIM}"
 
 	rm ${PCAP_NAME_1} ${PCAP_NAME_2} ${PCAP_NAME_3} ${PCAP_NAME_4} ${PCAP_NAME_5}
-	
+
 	# ./make_pcap.sh "${PCAP_NAME_1}"
 	# ./make_pcap.sh "${PCAP_NAME_2}"
 	# ./make_pcap.sh "${PCAP_NAME_3}"
@@ -108,13 +117,6 @@ else
 	fi
 fi
 
-#
-# enable debugging if requested
-#DEBUG="-d -d"
-#DEBUG="-d"
-DEBUG=""
-
-RIP_INTERVAL_ARG="-r 1"
 
 #
 # all of the router addresses
