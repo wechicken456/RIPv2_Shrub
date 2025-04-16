@@ -47,16 +47,16 @@ SHIM_MAX_SUBNET="172.31.0.0"
 SHIM_MAX_MASK=16
 
 SHIM_PREFIX="172.31.128" ## network the shim uses as its file interface.
-INTERNAL_PREFIX1="172.31.1"
-INTERNAL_PREFIX2="172.31.2"
-INTERNAL_PREFIX3="172.31.3"
-INTERNAL_PREFIX4="172.31.4"
-INTERNAL_PREFIX5="172.31.5"
-## not using publis since we need 
+
+INTERNAL_PREFIX="172.31"
+INTERNAL_PREFIX1="${INTERNAL_PREFIX}.1"
+INTERNAL_PREFIX2="${INTERNAL_PREFIX}.2"
+INTERNAL_PREFIX3="${INTERNAL_PREFIX}.3"
+INTERNAL_PREFIX4="${INTERNAL_PREFIX}.4"
+INTERNAL_PREFIX5="${INTERNAL_PREFIX}.5"
+## not using publics since we need 
 ## routing to them and dont want 
 ## to mess with real routes if possible.
-# PUBLIC_PREFIX="128.10.2"
-# UNUSED_PREFIX="128.10.3"
 MASKS=24
 
 #
@@ -70,8 +70,6 @@ MASKS=24
 # ./shrub [-d] -r 1 -i 172.31.5.254_24
 ## chain ends with a shrub with only one interface.
 
-# cleanup old packet files
-# rm -f ${IP_PREFIX1}*.dmp ${IP_PREFIX2}*.dmp
 
 
 ## wont work for masks that arent /24...
@@ -87,13 +85,9 @@ if [[ -z "${DRYRUN}" ]]; then
 	echo "Making pcaps"
 	./make_pcap.sh "${PCAP_NAME_SHIM}"
 
+	# cleanup old packet files
+	# rm -f ${INTERNAL_PREFIX}*.dmp
 	rm ${PCAP_NAME_1} ${PCAP_NAME_2} ${PCAP_NAME_3} ${PCAP_NAME_4} ${PCAP_NAME_5}
-
-	# ./make_pcap.sh "${PCAP_NAME_1}"
-	# ./make_pcap.sh "${PCAP_NAME_2}"
-	# ./make_pcap.sh "${PCAP_NAME_3}"
-	# ./make_pcap.sh "${PCAP_NAME_4}"
-	# ./make_pcap.sh "${PCAP_NAME_5}"
 
 	if [[ -n "${DOCKERIP}" ]]; then
 		echo "Adding IP route to docker container located at ip ${DOCKERIP}"
@@ -103,17 +97,11 @@ else
 	echo "Printing commands which would be run:"
 	echo "./make_pcap.sh ${PCAP_NAME_SHIM}"
 
-	echo "rm ${PCAP_NAME_1} ${PCAP_NAME_2} ${PCAP_NAME_3} ${PCAP_NAME_4} ${PCAP_NAME_5}"
-
-	# echo "./make_pcap.sh ${PCAP_NAME_1}"
-	# echo "./make_pcap.sh ${PCAP_NAME_2}"
-	# echo "./make_pcap.sh ${PCAP_NAME_3}"
-	# echo "./make_pcap.sh ${PCAP_NAME_4}"
-	# echo "./make_pcap.sh ${PCAP_NAME_5}"
+	echo "rm -f ${PCAP_NAME_1} ${PCAP_NAME_2} ${PCAP_NAME_3} ${PCAP_NAME_4} ${PCAP_NAME_5}"
 
 	if [[ -n "${DOCKERIP}" ]]; then
 		echo "Printing commands which would run to add IP routes to docker container located at ip ${DOCKERIP}"
-		echo "sudo ip route add ${SHIM_MAX_SUBNET}.0/${SHIM_MAX_MASK} via ${DOCKERIP}"
+		echo "sudo ip route add ${SHIM_MAX_SUBNET}/${SHIM_MAX_MASK} via ${DOCKERIP}"
 	fi
 fi
 

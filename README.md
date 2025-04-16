@@ -30,6 +30,7 @@ This README details the tools available for the Twig and Shrub projects.
 - [cleandocker.sh](README.md#cleandockersh)
 
 - [CHAIN.sh](README.md#chainsh)
+- [BOWTIE.sh](README.md#bowtiesh)
 
 ## Issues and Clarifications (ongoing updates)
 
@@ -42,6 +43,8 @@ This README details the tools available for the Twig and Shrub projects.
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
 - **(Clarification)** For debugging there are a few useful tools present.
+	<details>
+  	<summary>Expand</summary>
 	- For debugging checksums, Wireshark can check them for you and let you know if they are right or not. To enable this for UDP and IPv4, open wireshark and navigate to:
 		- `Edit -> Preferences -> Protocols -> IPv4` and check
 			- [x] ` Validate the IPv4 checksum if possible`
@@ -67,8 +70,7 @@ This README details the tools available for the Twig and Shrub projects.
 		sudo python3 shim.py -n "${IFACE_ARG}" -i "${EXT_IFACE_NAME}" -d
 		```
 		this will make it output a message and a packet summary every time it processes a packet from the pcap file.
-- **TODO:** Add support for multi-network setup behind the shim.
-
+	</details>
 
 ## Requirements
 
@@ -76,10 +78,14 @@ Requirements are listed in **bold**, suggested optional software is *italicized*
 
 ### Without Docker
 
+<details>
+  	<summary>Expand</summary>
+
 - **Two machines**
 	- Root access on both
 	- Ability to establish one as the `next-hop` for select traffic from the other (typically means both are on the same LAN)
 - **ping**
+- **traceroute**
 - **gcc**
 - **make**
 - **ip**
@@ -94,16 +100,24 @@ Requirements are listed in **bold**, suggested optional software is *italicized*
 - **libpcap**
 - *wireshark*
 
+</details>
+
 ### With Docker
+
+<details>
+  	<summary>Expand</summary>
 
 - **One machine**
 	- root access
 - **docker**
 - **ping**
+- **traceroute**
 - **gcc**
 - **make**
 - **ip**
 - *wireshark*
+
+</details>
 
 ## Running Overview
 <details>
@@ -270,12 +284,522 @@ sudo ip route del 172.31.0.0/16
 
 ## Testing
 
-***TESTING SECTION IS OUTDATED***
+### Testing Shrub
 
-**This testing section was written for the loopback version, which is now outdated. The only changes made are in the setup procedure, please follow the procedure in the [Running Overview](README.md#running-overview) or the [Running with Docker](README.md#running-with-docker) sections**
+<details>
+  	<summary>Expand Testing</summary>
+
+This section is for testing your Shrub program. Note that all references to your program still expect the executable to be named `twig`, however.
+
+If you choose to use an executable named `shrub`, you will need to change the program name at the top of the `CHAIN.sh` and `BOWTIE.sh` scripts.
+
+Also note that all the test scripts use `traceroute` instead of `mtr`, but `mtr` may be used instead. If you choose to use `mtr`, you will need to make the following changes to all traceroute commands:
+- Exchange `traceroute`'s `-I` option for `mtr`'s `-u` option
+- Remove the `-N 1` option
+- *if you want it to print results like traceroute instead of run interactively*
+	- Add options `-c 3` and `-r` 
+
+#### Test 1 (CHAIN.sh)
+
+##### Running without Docker
+
+<details>
+  <summary>Expand</summary>
+
+
+###### Setup
+
+We will start by establishing routes from the *ping machine* to the twigs on the *twig machine*. First we need the IP address of the *twig machine*, which can be obtained using the `ip` command on the *twig machine*. 
+
+I.e. 
+```c
+twig: ip r | grep default
+default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600 
+```
+> Here, we see the address for our default interface is `192.168.1.42`
+
+**Your next hop will likely be different, make sure to use *your* next hop IP instead of `192.168.1.42` in the commands that follow.**
+
+Then on the *ping machine* we establish routes that will direct traffic intended for the twigs to our `twig machine`.
+
+I.e.
+```c
+ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
+```
+
+Now we can start the shim and `twig`s on the *twig machine* using 
+```
+twig: ./twig_test.sh
+```
+and in another terminal
+```
+twig: ./CHAIN.sh
+```
+
+
+
+**NOTE: you will need to wait a few seconds to let RIP establish routes, and your default route argument to shrub will need to be functional.**
+
+---
+
+Finally we can send traffic from our *ping machine*. Test using the following commands:
+```
+ping:ping -c 5 172.31.128.254
+ping:ping -c 5 172.31.1.254
+ping:ping -c 5 172.31.4.254
+ping:ping -c 5 172.31.5.254
+
+ping:udpping -p 100 172.31.2.254
+
+ping:socket_time 172.31.3.254
+
+ping:traceroute -N 1 172.31.5.254
+ping:traceroute -N 1 -I 172.31.5.254
+```
+
+###### Repeat Running
+
+You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
+
+If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
+
+###### Shutdown
+
+To fully shut down all components of this project and return everything to the original state, we need to do the following:
+
+- Kill the shim script
+- In the terminal where you ran the `CHAIN.sh` script, run
+```ps | grep twig | awk '{ print $1 }' | xargs kill``` 
+	- if you are using a name for your program other than `twig`, change the grep argument to match.
+- On the *ping machine*, run
+```
+sudo ip r del 172.31.0.0/16
+```
+
+</details>
+
+##### Running with Docker
+
+<details>
+  <summary>Expand</summary>
+
+
+This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
+Additionally, docker allows us to have a strict environment and allow better portability across systems.
+
+###### Setup
+
+For initial setup, we will build the necessary components to run our shim in docker and have routes to get to it appropriately. 
+
+To begin, open three terminals with this repository as the working directory.
+
+Start by running the `dockershim.sh` script:
+
+```c
+./dockershim.sh
+```
+
+Now, in a separate temrinal window, start your CHAIN:
+
+```c
+./CHAIN.sh -d=172.31.127.254
+```
+**NOTE: if you change the ip your docker container uses in `dockershim.sh`, change the -d= argument to `CHAIN.sh` to match.**
+
+
+Finally we can send traffic from another terminal window. Test using the following commands:
+```
+ping -c 5 172.31.128.254
+ping -c 5 172.31.1.254
+ping -c 5 172.31.4.254
+ping -c 5 172.31.5.254
+
+udpping -p 100 172.31.2.254
+
+socket_time 172.31.3.254
+
+traceroute -N 1 172.31.5.254
+traceroute -N 1 -I 172.31.5.254
+```
+
+
+###### Repeat Running
+
+You can run `ping`, `traceroute`, `udpping`, or `socket_time` repeatedly without adverse effects aside from the growing pcap file.
+
+If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
+
+###### Shutdown commands
+
+To clean up, you will need to run the docker cleanup script and remove the ip routes added by the dockershim script.
+
+Additionally you will need to terminate all of the twigs the CHAIN started.
+If you are using a name for your program other than `twig`, change the grep argument to match.
+
+```c
+ps | grep twig | awk '{ print $1 }' | xargs kill
+
+./cleandocker.sh
+
+sudo ip route del 172.31.0.0/16
+
+```
+
+
+</details>
+
+
+##### Results
+<details>
+	<summary>Results</summary>
+
+Expected results per command:
+
+```bash
+$ ping -c 5 172.31.128.254
+PING 172.31.128.254 (172.31.128.254) 56(84) bytes of data.
+64 bytes from 172.31.128.254: icmp_seq=1 ttl=19 time=27.2 ms
+64 bytes from 172.31.128.254: icmp_seq=2 ttl=19 time=25.8 ms
+64 bytes from 172.31.128.254: icmp_seq=3 ttl=19 time=25.4 ms
+64 bytes from 172.31.128.254: icmp_seq=4 ttl=19 time=29.0 ms
+64 bytes from 172.31.128.254: icmp_seq=5 ttl=19 time=26.6 ms
+
+--- 172.31.128.254 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4003ms
+rtt min/avg/max/mdev = 25.417/26.801/29.001/1.257 ms
+```
+Make sure all 5 packets are responded to.
+
+```bash
+$ ping -c 5 172.31.1.254
+PING 172.31.1.254 (172.31.1.254) 56(84) bytes of data.
+64 bytes from 172.31.1.254: icmp_seq=1 ttl=18 time=49.9 ms
+64 bytes from 172.31.1.254: icmp_seq=2 ttl=18 time=48.4 ms
+64 bytes from 172.31.1.254: icmp_seq=3 ttl=18 time=42.1 ms
+64 bytes from 172.31.1.254: icmp_seq=4 ttl=18 time=45.4 ms
+64 bytes from 172.31.1.254: icmp_seq=5 ttl=18 time=39.6 ms
+
+--- 172.31.1.254 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4001ms
+rtt min/avg/max/mdev = 39.629/45.071/49.876/3.824 ms
+```
+Make sure all 5 packets are responded to.
+
+```bash
+$ ping -c 5 172.31.4.254
+PING 172.31.4.254 (172.31.4.254) 56(84) bytes of data.
+64 bytes from 172.31.4.254: icmp_seq=1 ttl=15 time=103 ms
+64 bytes from 172.31.4.254: icmp_seq=2 ttl=15 time=82.6 ms
+64 bytes from 172.31.4.254: icmp_seq=3 ttl=15 time=62.4 ms
+64 bytes from 172.31.4.254: icmp_seq=4 ttl=15 time=81.5 ms
+64 bytes from 172.31.4.254: icmp_seq=5 ttl=15 time=71.9 ms
+
+--- 172.31.4.254 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4004ms
+rtt min/avg/max/mdev = 62.406/80.292/103.079/13.530 ms
+```
+Make sure all 5 packets are responded to.
+
+```bash
+ping -c 5 172.31.5.254
+PING 172.31.5.254 (172.31.5.254) 56(84) bytes of data.
+64 bytes from 172.31.5.254: icmp_seq=1 ttl=15 time=123 ms
+64 bytes from 172.31.5.254: icmp_seq=2 ttl=15 time=92.1 ms
+64 bytes from 172.31.5.254: icmp_seq=3 ttl=15 time=80.4 ms
+64 bytes from 172.31.5.254: icmp_seq=4 ttl=15 time=93.5 ms
+64 bytes from 172.31.5.254: icmp_seq=5 ttl=15 time=106.9 ms
+
+--- 172.31.5.254 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4004ms
+rtt min/avg/max/mdev = 62.406/80.292/103.079/13.530 ms
+```
+Make sure all 5 packets are responded to.
+
+```bash
+$ udpping -p 100 172.31.2.254
+Sending 100 udp echo requests of size 50 to 172.31.2.254 on port echo
+
+
+time spent waiting for echos to return (in milliseconds):
+# sent  # rcvd  # late       total        min       max       avg
+------  ------  ------  -----------  --------  --------  --------
+   100     100       0     4769.922    26.088    94.075    47.699 
+0.00% packet loss
+```
+Make sure at least 95% of packets return (< 5% packet loss). (adding in leniency since a few packets lost isnt likely to be the fault of your program).
+
+
+```bash
+socket_time 172.31.3.254
+The time on 172.31.3.254 is 0x7167aaeb
+```
+Make sure you get a time response and the time it translates to is about right.
+
+```bash
+traceroute -N 1 172.31.5.254
+traceroute to 172.31.5.254 (172.31.5.254), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.094 ms  0.021 ms  0.016 ms
+ 2  172.31.128.254 (172.31.128.254)  87.955 ms  109.089 ms  128.026 ms
+ 3  172.31.1.254 (172.31.1.254)  164.474 ms  185.041 ms  205.117 ms
+ 4  172.31.2.254 (172.31.2.254)  223.223 ms  246.005 ms  265.887 ms
+ 5  172.31.3.254 (172.31.3.254)  286.306 ms  307.223 ms  332.030 ms
+ 6  172.31.4.254 (172.31.4.254)  349.024 ms  241.243 ms  259.911 ms
+ 7  172.31.5.254 (172.31.5.254)  278.742 ms  283.292 ms  302.529 ms
+
+traceroute -N 1 -I 172.31.5.254
+traceroute to 172.31.5.254 (172.31.5.254), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.114 ms  0.038 ms  0.008 ms
+ 2  172.31.128.254 (172.31.128.254)  42.838 ms  34.632 ms  50.058 ms
+ 3  172.31.1.254 (172.31.1.254)  59.394 ms  53.321 ms  53.980 ms
+ 4  172.31.2.254 (172.31.2.254)  73.779 ms  66.533 ms  75.825 ms
+ 5  172.31.3.254 (172.31.3.254)  92.896 ms  98.492 ms  66.052 ms
+ 6  172.31.4.254 (172.31.4.254)  85.345 ms  90.414 ms  98.648 ms
+ 7  172.31.5.254 (172.31.5.254)  120.825 ms  105.617 ms  96.255 ms
+ ```
+ Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+ 
+ Your first hop will be different if not using docker, but hops 2-7 should all be present and have the same addresses as shown above.
+
+</details>
+
+#### Test 2 (BOWTIE.sh)
+
+**NOTE: I plan to have an additional test where we bring down router `T` and test that RIP recovers to route to `P` via `R`, `Q`, but details arent finished yet. Once it is finished, I'll put out an announcement on Canvas and talk about it in class. ~Silas**
+
+##### Running without Docker
+
+<details>
+  <summary>Expand</summary>
+
+
+###### Setup
+
+We will start by establishing routes from the *ping machine* to the twigs on the *twig machine*. First we need the IP address of the *twig machine*, which can be obtained using the `ip` command on the *twig machine*. 
+
+I.e. 
+```c
+twig: ip r | grep default
+default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600 
+```
+> Here, we see the address for our default interface is `192.168.1.42`
+
+**Your next hop will likely be different, make sure to use *your* next hop IP instead of `192.168.1.42` in the commands that follow.**
+
+Then on the *ping machine* we establish routes that will direct traffic intended for the twigs to our `twig machine`.
+
+I.e.
+```c
+ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
+```
+
+Now we can start the shim and `twig`s on the *twig machine* using 
+```
+twig: ./twig_test.sh
+```
+and in another terminal
+```
+twig: ./BOWTIE.sh
+```
+
+
+
+**NOTE: you will need to wait a few seconds to let RIP establish routes, and your default route argument to shrub will need to be functional.**
+
+---
+
+Finally we can send traffic from our *ping machine*. Test using the following commands:
+
+```
+ping: traceroute -N 1 172.31.2.202
+ping: traceroute -N 1 -I 172.31.5.201
+ping: traceroute -N 1 172.31.8.207
+ping: udpping -p 100 172.31.2.202
+```
+
+Additionally, with a fresh start of BOWTIE and the shim, run the following:
+```
+twig: ./twig -i 172.31.2.1_24
+ping: traceroute -N 1 172.31.2.1
+```
+
+
+###### Repeat Running
+
+You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
+
+If you need to restart your BOWTIE, kill the twigs using the command in shutdown, and restart your shim as well.
+
+###### Shutdown
+
+To fully shut down all components of this project and return everything to the original state, we need to do the following:
+
+- Kill the shim script
+- In the terminal where you ran the `BOWTIE.sh` script, run
+```ps | grep twig | awk '{ print $1 }' | xargs kill``` 
+	- if you are using a name for your program other than `twig`, change the grep argument to match.
+- On the *ping machine*, run
+```
+sudo ip r del 172.31.0.0/16
+```
+
+</details>
+
+##### Running with Docker
+
+<details>
+  <summary>Expand</summary>
+
+
+This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
+Additionally, docker allows us to have a strict environment and allow better portability across systems.
+
+###### Setup
+
+For initial setup, we will build the necessary components to run our shim in docker and have routes to get to it appropriately. 
+
+To begin, open three terminals with this repository as the working directory.
+
+Start by running the `dockershim.sh` script:
+
+```c
+./dockershim.sh
+```
+
+Now, in a separate temrinal window, start your CHAIN:
+
+```c
+./CHAIN.sh -d=172.31.127.254
+```
+**NOTE: if you change the ip your docker container uses in `dockershim.sh`, change the -d= argument to `CHAIN.sh` to match.**
+
+
+Finally we can send traffic from another terminal window. Test using the following commands:
+```
+traceroute -N 1 172.31.2.202
+traceroute -N 1 -I 172.31.5.201
+traceroute -N 1 172.31.8.207
+udpping -p 100 172.31.2.202
+```
+
+Additionally, with a fresh start of BOWTIE and the shim, run the following (in separate terminals):
+```
+./twig -i 172.31.2.1_24
+traceroute -N 1 172.31.2.1
+```
+
+
+###### Repeat Running
+
+You can run `ping`, `traceroute`, `udpping`, or `socket_time` repeatedly without adverse effects aside from the growing pcap file.
+
+If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
+
+###### Shutdown commands
+
+To clean up, you will need to run the docker cleanup script and remove the ip routes added by the dockershim script.
+
+Additionally you will need to terminate all of the twigs the CHAIN started.
+If you are using a name for your program other than `twig`, change the grep argument to match.
+
+```c
+ps | grep twig | awk '{ print $1 }' | xargs kill
+
+./cleandocker.sh
+
+sudo ip route del 172.31.0.0/16
+
+```
+
+
+</details>
+
+
+##### Results
+<details>
+	<summary>Results</summary>
+
+Expected results per command:
+
+```bash
+$ traceroute -N 1 172.31.2.202
+traceroute to 172.31.2.202 (172.31.2.202), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.107 ms  0.054 ms  0.029 ms
+ 2  172.31.128.206 (172.31.128.206)  57.880 ms  42.472 ms  49.402 ms
+ 3  172.31.8.204 (172.31.8.204)  64.272 ms  59.255 ms  50.109 ms
+ 4  172.31.3.203 (172.31.3.203)  78.504 ms  74.194 ms  71.829 ms
+ 5  172.31.2.202 (172.31.2.202)  73.897 ms  63.242 ms  65.516 ms
+```
+Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+ 
+Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
+
+```bash
+$ traceroute -N 1 -I 172.31.5.201
+traceroute to 172.31.5.201 (172.31.5.201), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.051 ms  0.065 ms  0.023 ms
+ 2  172.31.128.206 (172.31.128.206)  46.155 ms  27.410 ms  40.946 ms
+ 3  172.31.8.204 (172.31.8.204)  47.950 ms  46.040 ms  51.580 ms
+ 4  172.31.4.205 (172.31.4.205)  35.293 ms  65.223 ms  53.334 ms
+ 5  172.31.5.201 (172.31.5.201)  51.703 ms  59.778 ms  58.171 ms
+```
+Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+ 
+Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
+
+```bash
+$ traceroute -N 1 172.31.8.207
+traceroute to 172.31.8.207 (172.31.8.207), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.071 ms * *
+ 2  172.31.128.206 (172.31.128.206)  31.208 ms  28.977 ms  47.371 ms
+ 3  172.31.8.204 (172.31.8.204)  42.911 ms  74.180 ms  80.931 ms
+ 4  172.31.8.207 (172.31.8.207)  76.002 ms  106.301 ms  112.522 ms
+
+```
+Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+ 
+Your first hop will be different if not using docker, but hops 2-4 should all be present and have the same addresses as shown above.
+
+```bash
+$ udpping -p 100 172.31.2.202
+Sending 100 udp echo requests of size 50 to 172.31.2.202 on port echo
+
+
+time spent waiting for echos to return (in milliseconds):
+# sent  # rcvd  # late       total        min       max       avg
+------  ------  ------  -----------  --------  --------  --------
+   100     100       0     5340.364    28.881    82.761    53.404 
+0.00% packet loss
+```
+Make sure at least 95% of packets return (< 5% packet loss). (adding in leniency since a few packets lost isnt likely to be the fault of your program).
+
+
+```bash
+$ traceroute -N 1 172.31.2.1
+traceroute to 172.31.2.1 (172.31.2.1), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.085 ms  0.068 ms  0.023 ms
+ 2  172.31.128.206 (172.31.128.206)  36.227 ms  38.673 ms  37.078 ms
+ 3  172.31.8.204 (172.31.8.204)  45.585 ms  68.764 ms  69.981 ms
+ 4  172.31.3.203 (172.31.3.203)  69.156 ms  65.744 ms  95.119 ms
+ 5  172.31.2.1 (172.31.2.1)  54.484 ms  97.076 ms  83.615 ms
+```
+Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+ 
+Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
+
+</details>
+
+</details>
+
+
+### Old testing section
 
 <details>
   <summary>Expand Outdated Testing</summary>
+
+***THE FOLLOWING TESTING SECTION IS OUTDATED***
+
+**This testing section was written for the loopback version, which is now outdated. The only changes made are in the setup procedure, please follow the procedure in the [Running Overview](README.md#running-overview) or the [Running with Docker](README.md#running-with-docker) sections**
+
 
 
 This section will detail exactly how to run tests that check basic functionality for your twig program.
@@ -693,152 +1217,65 @@ if you change values in either of those scripts, you must also change the values
 
 <img src="./CHAIN.sh.drawio.svg">
 
-To actually use this script and test your program using it, there are several changes to the [Running Overview](README.md#running-overview)/[Running with Docker](README.md#running-with-docker) though the overall idea is the same.
+Each shrub is assigned an interface on each network it is connected to. Usage is as follows:
+```
+./CHAIN.sh -h
+Usage: ./CHAIN.sh [options]
 
-The following is a procedure to run using this script.
+-h| --help          Display this help message and exit
+-d|--docker=<shim-docker-container-ip>  Set the ip for a docker container running the shim. This mode also enables the automatic creation of ip route rules on the local machine, and may prompt for root access to set those ip rules. 
+--dry-run			Run the script without executing commands, and instead printing them out.
+```
 
-### Running without Docker
+When run the script will output the commands used to start your shrubs, which includes the IP addresses each shrub is assigned, all of which have the final octet equal to decimal `253` or `254`.
 
+See [Testing#CHAIN.sh](README.md#test-1-chainsh) for details on running and testing with this script.
+
+</details>
+
+## BOWTIE.sh
 <details>
   <summary>Expand</summary>
 
 
-#### Setup
+### Description
 
-We will start by establishing routes from the *ping machine* to the twigs on the *twig machine*. First we need the IP address of the *twig machine*, which can be obtained using the `ip` command on the *twig machine*. 
+`BOWTIE.sh` sets up a bowtie of routers consisting  of a ring of 5 routers and an additional 2 routers connected to the same router in that ring, making the topology a bowtie shape.
 
-I.e. 
-```c
-twig: ip r | grep default
-default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600 
+<img src="./BOWTIE.sh.drawio.svg">
+
+Each shrub is assigned an interface on each network it is connected to. Usage is as follows:
 ```
-> Here, we see the address for our default interface is `192.168.1.42`
+./BOWTIE.sh -h
+Usage: ./BOWTIE.sh [options]
 
-**Your next hop will likely be different, make sure to use *your* next hop IP instead of `192.168.1.42` in the commands that follow.**
-
-Then on the *ping machine* we establish routes that will direct traffic intended for the twigs to our `twig machine`.
-
-I.e.
-```c
-ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
+-h| --help          Display this help message and exit
+-d|--docker=<shim-docker-container-ip>  Set the ip for a docker container running the shim. This mode also enables the automatic creation of ip route rules on the local machine, and may prompt for root access to set those ip rules. 
+--dry-run			Run the script without executing commands, and instead printing them out.
 ```
 
-Now we can start the shim and `twig`s on the *twig machine* using 
-```
-twig: ./twig_test.sh
-```
-and in another terminal
-```
-twig: ./CHAIN.sh
-```
+When run the script will output the commands used to start your shrubs, which includes the IP addresses each shrub is assigned.
 
+To make targeting specific routers easier, the following is a table which shows the addresses of each interface on each router by name:
 
+| Router Letter from Diagram | Interface IP | Neighbor Router(s) |
+|----:|:----|:----|
+| **P** | 172.31.1.201/24 | Q |
+| **P** | 172.31.5.201/24 | T |
+| **Q** | 172.31.1.202/24 | P |
+| **Q** | 172.31.2.202/24 | R |
+| **R** | 172.31.2.203/24 | Q |
+| **R** | 172.31.3.203/24 | S |
+| **S** | 172.31.3.204/24 | R |
+| **S** | 172.31.4.204/24 | T |
+| **S** | 172.31.8.204/24 | U |
+| **T** | 172.31.4.205/24 | S |
+| **T** | 172.31.5.205/24 | P |
+| **U** | 172.31.8.206/24 | S |
+| **U** | 172.31.128.206/24 | *(Shim)* |
+| **V** | 172.31.6.207/24 |  |
+| **V** | 172.31.8.207/24 | S |
 
-**NOTE: you will need to wait a few seconds to let RIP establish routes, and your default route argument to shrub will need to be functional.**
+See [Testing#BOWTIE.sh](README.md#test-2-bowtiesh) for details on running and testing with this script.
 
----
-
-Finally we can send traffic from our *ping machine*:
-```
-ping: ping 172.31.4.254
-```
-```
-ping: udpping 172.31.4.254
-```
-```
-ping: socket_time 172.31.4.254
-```
-```
-ping: traceroute 172.31.4.254
-```
-
-#### Repeat Running
-
-You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
-
-If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
-
-#### Shutdown
-
-To fully shut down all components of this project and return everything to the original state, we need to do the following:
-
-- Kill the shim script
-- In the terminal where you ran the `CHAIN.sh` script, run
-```ps | grep twig | awk '{ print $1 }' | xargs kill``` 
-	- if you are using a name for your program other than `twig`, change the grep argument to match.
-- On the *ping machine*, run
-```
-sudo ip r del 172.31.0.0/16
-```
-
-</details>
-
-### Running with Docker
-
-<details>
-  <summary>Expand</summary>
-
-
-This new version of the shim can only communicate with remote hosts, it cannot do loopback connections. So docker allows us to abstract this and do loopback connections in a way that appears as a remote connection to the shim.
-Additionally, docker allows us to have a strict environment and allow better portability across systems.
-
-#### Setup
-
-For initial setup, we will build the necessary components to run our shim in docker and have routes to get to it appropriately. 
-
-To begin, open three terminals with this repository as the working directory.
-
-Start by running the `dockershim.sh` script:
-
-```c
-./dockershim.sh
-```
-
-Now, in a separate temrinal window, start your CHAIN:
-
-```c
-./CHAIN.sh -d=172.31.127.254
-```
-**NOTE: if you change the ip your docker container uses in `dockershim.sh`, change the -d= argument to `CHAIN.sh` to match.**
-
-
-Finally we can send traffic from another terminal window:
-```
-ping 172.31.4.254
-```
-```
-udpping 172.31.4.254
-```
-```
-socket_time 172.31.4.254
-```
-```
-traceroute 172.31.4.254
-```
-
-
-#### Repeat Running
-
-You can run `ping`, `traceroute`, `udpping`, or `socket_time` repeatedly without adverse effects aside from the growing pcap file.
-
-If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
-
-#### Shutdown commands
-
-To clean up, you will need to run the docker cleanup script and remove the ip routes added by the dockershim script.
-
-Additionally you will need to terminate all of the twigs the CHAIN started.
-If you are using a name for your program other than `twig`, change the grep argument to match.
-
-```c
-ps | grep twig | awk '{ print $1 }' | xargs kill
-
-./cleandocker.sh
-
-sudo ip route del 172.31.0.0/16
-
-```
-
-
-</details>
 </details>
