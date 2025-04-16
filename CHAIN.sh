@@ -165,7 +165,7 @@ echo ${CMDS6}
 
 ## 
 if [[ -z "${DRYRUN}" ]]; then
-	${CMDS1} & ${CMDS2} & ${CMDS3} & ${CMDS4} & ${CMDS5} &
+	${CMDS1} & ${CMDS2} & ${CMDS3} & ${CMDS4} & ${CMDS5} & ${CMDS6} &
 	echo "Kill the network by typing:	ps | grep '${PROGRAM}' | awk '{ print \$1 }' | xargs kill"
 fi
 #
