@@ -36,10 +36,16 @@ This README details the tools available for the Twig and Shrub projects.
 
 - **(Issue)** `Ctrl+d` or `Ctrl+c` will not stop the shim if it is no longer recieving packets to forward to the pcap file (it only checks if it should stop when it gets another packet) 
 	- To stop it then, you can do one of the following
-		- Press `Ctrl+d` or `Ctrl+c` as usual, then send and additional packet to the shim using `ping 172.31.128.2` (or using another of the utilities given) 
+		- Press `Ctrl+d` or `Ctrl+c` as usual, then send and additional packet to the shim using `ping 172.31.128.2` (or similar) 
 		- Press `Ctrl+\` to forcibly kill the shim. The shim is multi-threaded, not multi-process, so this will correctly terminate it.
-- **(Issue)** The first packet recieved by the shim is often discarded. So assume that the first packet will be lost.
-	- I recommend either testing first with `ping` or run `time_socket` first, expecting it to go unanswered.
+- **(Clarification)** The shim __requires__ that all outbound packets have a source mac adress beginning with the byte `0xFE`, so your shrub must assign mac addresses to its interfaces for sending which begin with that byte.
+	- Additionally your twig will need to forward packets with a specific MAC address for the next hop because `BOWTIE.sh` has a network with 3 routers. 
+	
+		Since ARP is optional, I recommend forming MAC adresses using the IP address like so:
+
+		```172.31.128.254 -> fe:ac:1f:80:fe:00```
+		
+		(Note that `172.31.128.254` in hex is `ac.1f.80.fe`, so this is just inserting the IPv4 address into the MAC address with fixed start and end bytes.)
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
 - **(Clarification)** For debugging there are a few useful tools present.
