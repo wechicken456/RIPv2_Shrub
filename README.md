@@ -182,7 +182,7 @@ To fully shut down all components of this project and return everything to the o
 - Kill twig
 - On the *ping machine*, run
 ```
-sudo ip r del 172.31.128.0/24
+sudo ip r del 172.31.0.0/16
 ```
 
 
@@ -262,7 +262,7 @@ If you chose not to provide the `--rm` option to the `docker_test.sh` script, yo
 
 ```c
 docker network remove twignet
-sudo ip route del 172.31.128.0/24
+sudo ip route del 172.31.0.0/16
 ```
 
   
@@ -768,12 +768,7 @@ To fully shut down all components of this project and return everything to the o
 	- if you are using a name for your program other than `twig`, change the grep argument to match.
 - On the *ping machine*, run
 ```
-sudo ip r del 172.31.128.0/24
-sudo ip r del 172.31.1.0/24
-sudo ip r del 172.31.2.0/24
-sudo ip r del 172.31.3.0/24
-sudo ip r del 172.31.4.0/24
-sudo ip r del 172.31.5.0/24
+sudo ip r del 172.31.0.0/16
 ```
 
 </details>
