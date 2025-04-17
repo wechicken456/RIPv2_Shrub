@@ -110,7 +110,8 @@ Requirements are listed in **bold**, suggested optional software is *italicized*
 
 - **One machine**
 	- root access
-- **docker**
+- **docker** [(Installation Instructions)](https://docs.docker.com/engine/install/) 
+	- Ignore any prompt to install docker desktop, it is reportedly broken on windows at the moment.
 - **ping**
 - **traceroute**
 - **gcc**
