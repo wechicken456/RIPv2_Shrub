@@ -291,7 +291,7 @@ sudo ip route del 172.31.0.0/16
 
 This section is for testing your Shrub program.
 
-If you choose to use an executable named `shrub`, you will need to change the program name at the top of the `CHAIN.sh` and `BOWTIE.sh` scripts.
+If you choose to use an executable not named `shrub`, you will need to change the program name at the top of the `CHAIN.sh` and `BOWTIE.sh` scripts.
 
 Also note that all the test scripts use `traceroute` instead of `mtr`, but `mtr` may be used instead. If you choose to use `mtr`, you will need to make the following changes to all traceroute commands:
 - Exchange `traceroute`'s `-I` option for `mtr`'s `-u` option
