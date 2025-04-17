@@ -294,7 +294,7 @@ If you choose to use an executable not named `shrub`, you will need to change th
 
 Also note that all the test scripts use `traceroute` instead of `mtr`, but `mtr` may be used instead. If you choose to use `mtr`, you will need to make the following changes to all traceroute commands:
 - Exchange `traceroute`'s `-I` option for `mtr`'s `-u` option
-- Remove the `-N 1` option
+- Remove the `-N 1` option if present
 - *if you want it to print results like traceroute instead of run interactively*
 	- Add options `-c 3` and `-r` 
 
@@ -467,7 +467,7 @@ PING 172.31.128.254 (172.31.128.254) 56(84) bytes of data.
 5 packets transmitted, 5 received, 0% packet loss, time 4003ms
 rtt min/avg/max/mdev = 25.417/26.801/29.001/1.257 ms
 ```
-Make sure all 5 packets are responded to.
+> Make sure all 5 packets are responded to.
 
 ```bash
 $ ping -c 5 172.31.1.254
@@ -482,7 +482,7 @@ PING 172.31.1.254 (172.31.1.254) 56(84) bytes of data.
 5 packets transmitted, 5 received, 0% packet loss, time 4001ms
 rtt min/avg/max/mdev = 39.629/45.071/49.876/3.824 ms
 ```
-Make sure all 5 packets are responded to.
+> Make sure all 5 packets are responded to.
 
 ```bash
 $ ping -c 5 172.31.4.254
@@ -497,7 +497,7 @@ PING 172.31.4.254 (172.31.4.254) 56(84) bytes of data.
 5 packets transmitted, 5 received, 0% packet loss, time 4004ms
 rtt min/avg/max/mdev = 62.406/80.292/103.079/13.530 ms
 ```
-Make sure all 5 packets are responded to.
+> Make sure all 5 packets are responded to.
 
 ```bash
 ping -c 5 172.31.5.254
@@ -512,7 +512,7 @@ PING 172.31.5.254 (172.31.5.254) 56(84) bytes of data.
 5 packets transmitted, 5 received, 0% packet loss, time 4004ms
 rtt min/avg/max/mdev = 62.406/80.292/103.079/13.530 ms
 ```
-Make sure all 5 packets are responded to.
+> Make sure all 5 packets are responded to.
 
 ```bash
 $ udpping -p 100 172.31.2.254
@@ -525,14 +525,14 @@ time spent waiting for echos to return (in milliseconds):
    100     100       0     4769.922    26.088    94.075    47.699 
 0.00% packet loss
 ```
-Make sure at least 95% of packets return (< 5% packet loss). (adding in leniency since a few packets lost isnt likely to be the fault of your program).
+> Make sure at least 95% of packets return (< 5% packet loss). (adding in leniency since a few packets lost isnt likely to be the fault of your program).
 
 
 ```bash
 socket_time 172.31.3.254
 The time on 172.31.3.254 is 0x7167aaeb
 ```
-Make sure you get a time response and the time it translates to is about right.
+> Make sure you get a time response and the time it translates to is about right.
 
 ```bash
 traceroute -N 1 172.31.5.254
@@ -555,9 +555,9 @@ traceroute to 172.31.5.254 (172.31.5.254), 30 hops max, 60 byte packets
  6  172.31.4.254 (172.31.4.254)  85.345 ms  90.414 ms  98.648 ms
  7  172.31.5.254 (172.31.5.254)  120.825 ms  105.617 ms  96.255 ms
  ```
- Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
- 
- Your first hop will be different if not using docker, but hops 2-7 should all be present and have the same addresses as shown above.
+> Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+> 
+> Your first hop will be different if not using docker, but hops 2-7 should all be present and have the same addresses as shown above.
 
 </details>
 
@@ -616,12 +616,28 @@ ping: traceroute -N 1 172.31.8.207
 ping: udpping -p 100 172.31.2.202
 ```
 
-Additionally, with a fresh start of BOWTIE and the shim, run the following:
+Additionally, with a fresh start of BOWTIE and the shim, do the following:
+
+In the same terminal as you ran the BOWTIE script, run
 ```
-shrub: ./shrub -i 172.31.2.1_24
-ping: traceroute -N 1 172.31.2.1
+shrub: ./shrub -i 172.31.5.1_24 &
 ```
 
+Then run
+```
+ping: traceroute 172.31.5.1
+```
+
+Then run the following in the same terminal as you ran the BOWTIE script:
+```
+shrub: ps -f | grep 172.31.5.205 | awk '{ print $2 }' | xargs kill
+```
+
+Wait for a period of time, at least 2 minutes, then run the following:
+```
+ping: traceroute 172.31.5.1
+```
+(if it doesnt work the first time, feel free to wait longer and rerun, RIP recognizing and recovering from a downed router takes time)
 
 ###### Repeat Running
 
@@ -681,12 +697,36 @@ traceroute -N 1 172.31.8.207
 udpping -p 100 172.31.2.202
 ```
 
-Additionally, with a fresh start of BOWTIE and the shim, run the following (in separate terminals):
+Additionally, with a fresh start of BOWTIE and the shim, do the following:
+
+In the same terminal as you ran the BOWTIE script, run
 ```
-./shrub -i 172.31.2.1_24
-traceroute -N 1 172.31.2.1
+./shrub -i 172.31.5.1_24 &
 ```
 
+Then in a separate terminal, run:
+```
+traceroute 172.31.5.1
+
+traceroute 172.31.5.1
+traceroute to 172.31.5.1 (172.31.5.1), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.048 ms  0.007 ms  0.006 ms
+ 2  172.31.128.206 (172.31.128.206)  18.523 ms  34.355 ms  55.346 ms
+ 3  172.31.8.204 (172.31.8.204)  71.412 ms  87.294 ms  100.207 ms
+ 4  172.31.4.205 (172.31.4.205)  153.301 ms  178.998 ms  197.683 ms
+ 5  172.31.5.1 (172.31.5.1)  222.198 ms  244.901 ms  259.225 ms
+```
+
+Then run the following in the same terminal as you ran the BOWTIE script:
+```
+ps -f | grep 172.31.5.205 | awk '{ print $2 }' | xargs kill
+```
+
+Wait for a period of time, at least 2 minutes, then run the following in another terminal:
+```
+traceroute 172.31.5.1
+```
+(if it doesnt work the first time, feel free to wait longer and rerun, RIP recognizing and recovering from a downed router takes time)
 
 ###### Repeat Running
 
@@ -729,9 +769,9 @@ traceroute to 172.31.2.202 (172.31.2.202), 30 hops max, 60 byte packets
  4  172.31.3.203 (172.31.3.203)  78.504 ms  74.194 ms  71.829 ms
  5  172.31.2.202 (172.31.2.202)  73.897 ms  63.242 ms  65.516 ms
 ```
-Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
- 
-Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
+>Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+> 
+>Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
 
 ```bash
 $ traceroute -N 1 -I 172.31.5.201
@@ -742,9 +782,9 @@ traceroute to 172.31.5.201 (172.31.5.201), 30 hops max, 60 byte packets
  4  172.31.4.205 (172.31.4.205)  35.293 ms  65.223 ms  53.334 ms
  5  172.31.5.201 (172.31.5.201)  51.703 ms  59.778 ms  58.171 ms
 ```
-Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
- 
-Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
+>Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+>
+>Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
 
 ```bash
 $ traceroute -N 1 172.31.8.207
@@ -755,9 +795,9 @@ traceroute to 172.31.8.207 (172.31.8.207), 30 hops max, 60 byte packets
  4  172.31.8.207 (172.31.8.207)  76.002 ms  106.301 ms  112.522 ms
 
 ```
-Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
- 
-Your first hop will be different if not using docker, but hops 2-4 should all be present and have the same addresses as shown above.
+>Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+>
+>Your first hop will be different if not using docker, but hops 2-4 should all be present and have the same addresses as shown above.
 
 ```bash
 $ udpping -p 100 172.31.2.202
@@ -770,7 +810,7 @@ time spent waiting for echos to return (in milliseconds):
    100     100       0     5340.364    28.881    82.761    53.404 
 0.00% packet loss
 ```
-Make sure at least 95% of packets return (< 5% packet loss). (adding in leniency since a few packets lost isnt likely to be the fault of your program).
+> Make sure at least 95% of packets return (< 5% packet loss). (adding in leniency since a few packets lost isnt likely to be the fault of your program).
 
 
 ```bash
@@ -782,9 +822,37 @@ traceroute to 172.31.2.1 (172.31.2.1), 30 hops max, 60 byte packets
  4  172.31.3.203 (172.31.3.203)  69.156 ms  65.744 ms  95.119 ms
  5  172.31.2.1 (172.31.2.1)  54.484 ms  97.076 ms  83.615 ms
 ```
-Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
- 
-Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
+> Make sure you have a full route to the host, that is that at least all the shrubs appear in the list. 
+>
+> Your first hop will be different if not using docker, but hops 2-5 should all be present and have the same addresses as shown above.
+
+---
+From **Before** killing router `T` using `ps -f | grep 172.31.5.205 | awk '{ print $2 }' | xargs kill`, we have:
+```bash
+$ traceroute 172.31.5.1
+traceroute to 172.31.5.1 (172.31.5.1), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.048 ms  0.007 ms  0.006 ms
+ 2  172.31.128.206 (172.31.128.206)  18.523 ms  34.355 ms  55.346 ms
+ 3  172.31.8.204 (172.31.8.204)  71.412 ms  87.294 ms  100.207 ms
+ 4  172.31.4.205 (172.31.4.205)  153.301 ms  178.998 ms  197.683 ms
+ 5  172.31.5.1 (172.31.5.1)  222.198 ms  244.901 ms  259.225 ms
+```
+> The final four hops (2-5) of this traceroute should match precisely, with each hop being the same as seen in this output. 
+
+
+From **After** killing router `T` using `ps -f | grep 172.31.5.205 | awk '{ print $2 }' | xargs kill`, we have:
+```bash
+$ traceroute 172.31.5.1
+traceroute to 172.31.5.1 (172.31.5.1), 30 hops max, 60 byte packets
+ 1  172.31.127.254 (172.31.127.254)  0.094 ms  0.020 ms  0.016 ms
+ 2  172.31.128.206 (172.31.128.206)  54.043 ms  88.967 ms  110.122 ms
+ 3  172.31.8.204 (172.31.8.204)  128.400 ms  151.593 ms  178.332 ms
+ 4  172.31.3.203 (172.31.3.203)  193.054 ms  214.178 ms  238.895 ms
+ 5  172.31.2.202 (172.31.2.202)  259.371 ms  279.807 ms  300.097 ms
+ 6  172.31.1.201 (172.31.1.201)  321.406 ms  75.678 ms  86.299 ms
+ 7  172.31.5.1 (172.31.5.1)  101.170 ms  165.863 ms  189.952 ms
+```
+>	The final six hops (2-7) of this traceroute should match precisely, with each hop being the same as seen in this output. 
 
 </details>
 
