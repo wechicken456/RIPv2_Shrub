@@ -289,7 +289,7 @@ sudo ip route del 172.31.0.0/16
 <details>
   	<summary>Expand Testing</summary>
 
-This section is for testing your Shrub program. Note that all references to your program still expect the executable to be named `shrub`, however.
+This section is for testing your Shrub program.
 
 If you choose to use an executable named `shrub`, you will need to change the program name at the top of the `CHAIN.sh` and `BOWTIE.sh` scripts.
 
