@@ -39,7 +39,7 @@ This README details the tools available for the Twig and Shrub projects. This ve
 
 		```172.31.128.254 -> 5e:fe:ac:1f:80:fe```
 		
-		(Note that `172.31.128.254` in hex is `ac.1f.80.fe`, so this is just inserting the IPv4 address into the MAC address with fixed start and end bytes. The first two bytes come from the IANA standard for embedding IPv4 addresses in your MAC address. See [RFC 9542](https://www.rfc-editor.org/rfc/rfc9542.html) )
+		(Note that `172.31.128.254` in hex is `ac.1f.80.fe`, so this is just inserting the IPv4 address into the MAC address with fixed start bytes. The first two bytes come from the IANA standard for embedding IPv4 addresses in your MAC address. See [RFC 9542](https://www.rfc-editor.org/rfc/rfc9542.html) )
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
 - **(Clarification)** For debugging there are a few useful tools present.
