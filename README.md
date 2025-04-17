@@ -1,7 +1,6 @@
 # CS 4440 Twig/Shrub project tools
 
-This README details the tools available for the Twig and Shrub projects.
-`twig` is used to reference your program in all cases, even for the `shrub` project components.
+This README details the tools available for the Twig and Shrub projects. This version of the README is dedicated to the shrub project.
 
 **NOTE: The testing section is outdated. For now, use the [CHAIN.sh](README.md#chainsh) section to test routing with your shrub.**
 
@@ -39,7 +38,7 @@ This README details the tools available for the Twig and Shrub projects.
 		- Press `Ctrl+d` or `Ctrl+c` as usual, then send and additional packet to the shim using `ping 172.31.128.2` (or similar) 
 		- Press `Ctrl+\` to forcibly kill the shim. The shim is multi-threaded, not multi-process, so this will correctly terminate it.
 - **(Clarification)** The shim __requires__ that all outbound packets have a source mac adress beginning with the byte `0xFE`, so your shrub must assign mac addresses to its interfaces for sending which begin with that byte.
-	- Additionally your twig will need to forward packets with a specific MAC address for the next hop because `BOWTIE.sh` has a network with 3 routers. 
+	- Additionally your shrub will need to forward packets with a specific MAC address for the next hop because `BOWTIE.sh` has a network with 3 routers. 
 	
 		Since ARP is optional, I recommend forming MAC adresses using the IP address like so:
 
@@ -129,35 +128,35 @@ Requirements are listed in **bold**, suggested optional software is *italicized*
 <details>
   <summary>Expand Running Overview</summary>
 
-To run in the scenario without docker, we will be using one machine to run `twig` and `shim.py`, and the other to send traffic using `ping`, `udpping`, or `socket_time`. 
+To run in the scenario without docker, we will be using one machine to run `shrub` and `shim.py`, and the other to send traffic using `ping`, `udpping`, or `socket_time`. 
 
-From now on, I will refer to the machine running the `twig` and `shim.py` as the *twig machine*, and the machine running `ping`, `udpping`, or `socket_time` as the *ping machine*. Any commands will be prefixed with `twig:` or `ping:` to represent which machine they are to be run on.
+From now on, I will refer to the machine running the `shrub` and `shim.py` as the *shrub machine*, and the machine running `ping`, `udpping`, or `socket_time` as the *ping machine*. Any commands will be prefixed with `shrub:` or `ping:` to represent which machine they are to be run on.
 
 ### Setup
 
-We will start by establishing routes from the *ping machine* to the twigs on the *twig machine*. First we need the IP address of the *twig machine*, which can be obtained using the `ip` command on the *twig machine*. 
+We will start by establishing routes from the *ping machine* to the shrubs on the *shrub machine*. First we need the IP address of the *shrub machine*, which can be obtained using the `ip` command on the *shrub machine*. 
 
 I.e. 
 ```c
-twig: ip r | grep default
+shrub: ip r | grep default
 default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600 
 ```
 > Here, we see the address for our default interface is `192.168.1.42`
 
-Then on the *ping machine* we establish a route that will direct traffic intended for the twigs to our `twig machine`.
+Then on the *ping machine* we establish a route that will direct traffic intended for the shrubs to our `shrub machine`.
 
 I.e.
 ```c
 ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
 ```
 
-Now we can start the shim and `twig` on the *twig machine* using 
+Now we can start the shim and `shrub` on the *shrub machine* using 
 ```
-twig: ./twig_test.sh
+shrub: ./twig_test.sh
 ```
 and in another terminal
 ```
-twig: ./twig -i 172.31.128.2_24
+shrub: ./shrub -i 172.31.128.2_24
 ```
 
 ---
@@ -190,9 +189,9 @@ ping: socket_time 172.31.128.2
 
 ### Repeat Running
 
-You can run `ping`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
+You can run `ping`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *shrub machine*.
 
-If you need to restart your twig, then also restart the shim, but no other action is needed.
+If you need to restart your shrub, then also restart the shim, but no other action is needed.
 
 ### Shutdown
 
@@ -258,10 +257,10 @@ Start by running the `docker_test.sh` script:
 ./docker_test.sh --rm
 ```
 
-Now, in a separate terminal window, start twig:
+Now, in a separate terminal window, start shrub:
 
 ```c
-./twig -i 172.31.128.2_24
+./shrub -i 172.31.128.2_24
 ```
 
 Finally we can send traffic from another terminal window:
@@ -295,7 +294,7 @@ sudo ip route del 172.31.0.0/16
 <details>
   	<summary>Expand Testing</summary>
 
-This section is for testing your Shrub program. Note that all references to your program still expect the executable to be named `twig`, however.
+This section is for testing your Shrub program. Note that all references to your program still expect the executable to be named `shrub`, however.
 
 If you choose to use an executable named `shrub`, you will need to change the program name at the top of the `CHAIN.sh` and `BOWTIE.sh` scripts.
 
@@ -315,31 +314,31 @@ Also note that all the test scripts use `traceroute` instead of `mtr`, but `mtr`
 
 ###### Setup
 
-We will start by establishing routes from the *ping machine* to the twigs on the *twig machine*. First we need the IP address of the *twig machine*, which can be obtained using the `ip` command on the *twig machine*. 
+We will start by establishing routes from the *ping machine* to the shrubs on the *shrub machine*. First we need the IP address of the *shrub machine*, which can be obtained using the `ip` command on the *shrub machine*. 
 
 I.e. 
 ```c
-twig: ip r | grep default
+shrub: ip r | grep default
 default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600 
 ```
 > Here, we see the address for our default interface is `192.168.1.42`
 
 **Your next hop will likely be different, make sure to use *your* next hop IP instead of `192.168.1.42` in the commands that follow.**
 
-Then on the *ping machine* we establish routes that will direct traffic intended for the twigs to our `twig machine`.
+Then on the *ping machine* we establish routes that will direct traffic intended for the shrubs to our `shrub machine`.
 
 I.e.
 ```c
 ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
 ```
 
-Now we can start the shim and `twig`s on the *twig machine* using 
+Now we can start the shim and `shrub`s on the *shrub machine* using 
 ```
-twig: ./twig_test.sh
+shrub: ./twig_test.sh
 ```
 and in another terminal
 ```
-twig: ./CHAIN.sh
+shrub: ./CHAIN.sh
 ```
 
 
@@ -365,9 +364,9 @@ ping:traceroute -N 1 -I 172.31.5.254
 
 ###### Repeat Running
 
-You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
+You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *shrub machine*.
 
-If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
+If you need to restart your CHAIN, kill the shrubs using the command in shutdown, and restart your shim as well.
 
 ###### Shutdown
 
@@ -375,8 +374,8 @@ To fully shut down all components of this project and return everything to the o
 
 - Kill the shim script
 - In the terminal where you ran the `CHAIN.sh` script, run
-```ps | grep twig | awk '{ print $1 }' | xargs kill``` 
-	- if you are using a name for your program other than `twig`, change the grep argument to match.
+```ps | grep shrub | awk '{ print $1 }' | xargs kill``` 
+	- if you are using a name for your program other than `shrub`, change the grep argument to match.
 - On the *ping machine*, run
 ```
 sudo ip r del 172.31.0.0/16
@@ -433,17 +432,17 @@ traceroute -N 1 -I 172.31.5.254
 
 You can run `ping`, `traceroute`, `udpping`, or `socket_time` repeatedly without adverse effects aside from the growing pcap file.
 
-If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
+If you need to restart your CHAIN, kill the shrubs using the command in shutdown, and restart your shim as well.
 
 ###### Shutdown commands
 
 To clean up, you will need to run the docker cleanup script and remove the ip routes added by the dockershim script.
 
-Additionally you will need to terminate all of the twigs the CHAIN started.
-If you are using a name for your program other than `twig`, change the grep argument to match.
+Additionally you will need to terminate all of the shrubs the CHAIN started.
+If you are using a name for your program other than `shrub`, change the grep argument to match.
 
 ```c
-ps | grep twig | awk '{ print $1 }' | xargs kill
+ps | grep shrub | awk '{ print $1 }' | xargs kill
 
 ./cleandocker.sh
 
@@ -580,31 +579,31 @@ traceroute to 172.31.5.254 (172.31.5.254), 30 hops max, 60 byte packets
 
 ###### Setup
 
-We will start by establishing routes from the *ping machine* to the twigs on the *twig machine*. First we need the IP address of the *twig machine*, which can be obtained using the `ip` command on the *twig machine*. 
+We will start by establishing routes from the *ping machine* to the shrubs on the *shrub machine*. First we need the IP address of the *shrub machine*, which can be obtained using the `ip` command on the *shrub machine*. 
 
 I.e. 
 ```c
-twig: ip r | grep default
+shrub: ip r | grep default
 default via 192.168.1.1 dev wlp170s0 proto dhcp src 192.168.1.42 metric 600 
 ```
 > Here, we see the address for our default interface is `192.168.1.42`
 
 **Your next hop will likely be different, make sure to use *your* next hop IP instead of `192.168.1.42` in the commands that follow.**
 
-Then on the *ping machine* we establish routes that will direct traffic intended for the twigs to our `twig machine`.
+Then on the *ping machine* we establish routes that will direct traffic intended for the shrubs to our `shrub machine`.
 
 I.e.
 ```c
 ping: sudo ip r add 172.31.0.0/16 via 192.168.1.42
 ```
 
-Now we can start the shim and `twig`s on the *twig machine* using 
+Now we can start the shim and `shrub`s on the *shrub machine* using 
 ```
-twig: ./twig_test.sh
+shrub: ./twig_test.sh
 ```
 and in another terminal
 ```
-twig: ./BOWTIE.sh
+shrub: ./BOWTIE.sh
 ```
 
 
@@ -624,16 +623,16 @@ ping: udpping -p 100 172.31.2.202
 
 Additionally, with a fresh start of BOWTIE and the shim, run the following:
 ```
-twig: ./twig -i 172.31.2.1_24
+shrub: ./shrub -i 172.31.2.1_24
 ping: traceroute -N 1 172.31.2.1
 ```
 
 
 ###### Repeat Running
 
-You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *twig machine*.
+You can run `ping`, `traceroute`, `udpping`, or `socket_time` on the *ping machine* repeatedly without adverse effects aside from the growing pcap file on the *shrub machine*.
 
-If you need to restart your BOWTIE, kill the twigs using the command in shutdown, and restart your shim as well.
+If you need to restart your BOWTIE, kill the shrubs using the command in shutdown, and restart your shim as well.
 
 ###### Shutdown
 
@@ -641,8 +640,8 @@ To fully shut down all components of this project and return everything to the o
 
 - Kill the shim script
 - In the terminal where you ran the `BOWTIE.sh` script, run
-```ps | grep twig | awk '{ print $1 }' | xargs kill``` 
-	- if you are using a name for your program other than `twig`, change the grep argument to match.
+```ps | grep shrub | awk '{ print $1 }' | xargs kill``` 
+	- if you are using a name for your program other than `shrub`, change the grep argument to match.
 - On the *ping machine*, run
 ```
 sudo ip r del 172.31.0.0/16
@@ -689,7 +688,7 @@ udpping -p 100 172.31.2.202
 
 Additionally, with a fresh start of BOWTIE and the shim, run the following (in separate terminals):
 ```
-./twig -i 172.31.2.1_24
+./shrub -i 172.31.2.1_24
 traceroute -N 1 172.31.2.1
 ```
 
@@ -698,17 +697,17 @@ traceroute -N 1 172.31.2.1
 
 You can run `ping`, `traceroute`, `udpping`, or `socket_time` repeatedly without adverse effects aside from the growing pcap file.
 
-If you need to restart your BOWTIE, kill the twigs using the command in shutdown, and restart your shim as well.
+If you need to restart your BOWTIE, kill the shrubs using the command in shutdown, and restart your shim as well.
 
 ###### Shutdown commands
 
 To clean up, you will need to run the docker cleanup script and remove the ip routes added by the dockershim script.
 
-Additionally you will need to terminate all of the twigs the BOWTIE started.
-If you are using a name for your program other than `twig`, change the grep argument to match.
+Additionally you will need to terminate all of the shrubs the BOWTIE started.
+If you are using a name for your program other than `shrub`, change the grep argument to match.
 
 ```c
-ps | grep twig | awk '{ print $1 }' | xargs kill
+ps | grep shrub | awk '{ print $1 }' | xargs kill
 
 ./cleandocker.sh
 
@@ -796,7 +795,7 @@ Your first hop will be different if not using docker, but hops 2-5 should all be
 
 </details>
 
-
+<!-- 
 ### Old testing section
 
 <details>
@@ -1011,7 +1010,7 @@ Key components to make sure are correct:
 - Time appears incorrect despite a correct conversion method
 	- usually caused by a failure to convert the timestamp on to big endian within `twig`, or a failure to convert from the unix standard `1970` epoch to the [RFC 868](https://www.rfc-editor.org/rfc/rfc868.html) `1900` epoch
 
-</details>
+</details> -->
 
 ## shim.py
 <details>
@@ -1019,9 +1018,9 @@ Key components to make sure are correct:
 
 ### Description
 
-The shim sits between the pcap file we use as an interface for twig and the real network. 
+The shim sits between the pcap file we use as an interface for shrub and the real network. 
 
-The shim uses a direct forwarding mechanism, so we can only talk to things on the same local machine as the shim/twig. It also only forwards ipv4 packets which are
+The shim uses a direct forwarding mechanism, so we can only talk to things on the same local machine as the shim/shrub. It also only forwards ipv4 packets which are
 
 - In the pcap file, from the network that file represents,and destined to something not on that network
 
@@ -1195,7 +1194,7 @@ To close down the shim and container this script starts, simply use `ctrl+d` or 
 
 To use new parameters from the default, edit the script to use your chosen values, but be warned that modifying any of the network addresses will require changing the addresses in all commands which reference them.
 
-This script is provided for use mostly for cases where the shim may need restarted frequently and it is easier to manually do the docker image, docker network, and ip route setup and shutdown than to let the `docker_test.sh` script do it for you. Most of these cases are debugging for now, but once your twig becomes a shrub router, this will be more likely to be used. (and there will be additional instructions to go along with it.) 
+This script is provided for use mostly for cases where the shim may need restarted frequently and it is easier to manually do the docker image, docker network, and ip route setup and shutdown than to let the `docker_test.sh` script do it for you. Most of these cases are debugging for now, but once your shrub becomes a shrub router, this will be more likely to be used. (and there will be additional instructions to go along with it.) 
 
 </details>
 

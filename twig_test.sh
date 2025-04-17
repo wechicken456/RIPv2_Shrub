@@ -1,5 +1,8 @@
 #!/bin/bash
 
+TOOLDIR=.
+PROGRAM="shrub"
+
 ## External interface name to use
 ## NOTE: will not work if your default interface has spaces in its name.
 ## if that is the case, either manually define this value, or enable taking the value as an argument.
@@ -112,10 +115,10 @@ exit 0
 
 ## assumes .2 is available on the network...
 TWIG_ADDRESS="$(sed "s/(.*\..*\..*\.).*/2/g")"
-## start the twig (same directory as this script was run in)
-./twig -i "${TWIG_ADDRESS}_${PREFIX}"
+## start the shrub (same directory as this script was run in)
+${TOOLDIR}/${PROGRAM} -i "${TWIG_ADDRESS}_${PREFIX}"
 
-## now we can ping or ask time or whatever from outside and our twig will reply (hopefully).
+## now we can ping or ask time or whatever from outside and our shrub will reply (hopefully).
 ## e.g.
 ping "${TWIG_ADDRESS}"
 socket_time "${TWIG_ADDRESS}"
