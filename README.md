@@ -258,7 +258,7 @@ Start by running the `docker_test.sh` script:
 ./docker_test.sh --rm
 ```
 
-Now, in a separate temrinal window, start twig:
+Now, in a separate terminal window, start twig:
 
 ```c
 ./twig -i 172.31.128.2_24
@@ -405,7 +405,7 @@ Start by running the `dockershim.sh` script:
 ./dockershim.sh
 ```
 
-Now, in a separate temrinal window, start your CHAIN:
+Now, in a separate terminal window, start your CHAIN:
 
 ```c
 ./CHAIN.sh -d=172.31.127.254
@@ -671,12 +671,12 @@ Start by running the `dockershim.sh` script:
 ./dockershim.sh
 ```
 
-Now, in a separate temrinal window, start your CHAIN:
+Now, in a separate terminal window, start your BOWTIE:
 
 ```c
 ./CHAIN.sh -d=172.31.127.254
 ```
-**NOTE: if you change the ip your docker container uses in `dockershim.sh`, change the -d= argument to `CHAIN.sh` to match.**
+**NOTE: if you change the ip your docker container uses in `dockershim.sh`, change the -d= argument to `BOWTIE.sh` to match.**
 
 
 Finally we can send traffic from another terminal window. Test using the following commands:
@@ -698,13 +698,13 @@ traceroute -N 1 172.31.2.1
 
 You can run `ping`, `traceroute`, `udpping`, or `socket_time` repeatedly without adverse effects aside from the growing pcap file.
 
-If you need to restart your CHAIN, kill the twigs using the command in shutdown, and restart your shim as well.
+If you need to restart your BOWTIE, kill the twigs using the command in shutdown, and restart your shim as well.
 
 ###### Shutdown commands
 
 To clean up, you will need to run the docker cleanup script and remove the ip routes added by the dockershim script.
 
-Additionally you will need to terminate all of the twigs the CHAIN started.
+Additionally you will need to terminate all of the twigs the BOWTIE started.
 If you are using a name for your program other than `twig`, change the grep argument to match.
 
 ```c
