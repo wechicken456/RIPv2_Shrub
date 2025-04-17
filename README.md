@@ -564,7 +564,8 @@ traceroute to 172.31.5.254 (172.31.5.254), 30 hops max, 60 byte packets
 
 #### Test 2 (BOWTIE.sh)
 
-**NOTE: I plan to have an additional test where we bring down router `T` and test that RIP recovers to route to `P` via `R`, `Q`, but details arent finished yet. Once it is finished, I'll put out an announcement on Canvas and talk about it in class. ~Silas**
+**NOTE: I plan to have an additional test where we bring down router `T` and test that RIP recovers to route to `P` via `R`, `Q`, but details arent finished yet. Once it is finished, I'll put out an announcement on Canvas and talk about it in class. ~Silas  PS. the router name notation is from the [BOWTIE.sh](README.md#bowtiesh) section.**
+
 
 ##### Running without Docker
 
