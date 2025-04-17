@@ -32,20 +32,20 @@ This README details the tools available for the Twig and Shrub projects. This ve
 	- To stop it then, you can do one of the following
 		- Press `Ctrl+d` or `Ctrl+c` as usual, then send and additional packet to the shim using `ping 172.31.128.2` (or similar) 
 		- Press `Ctrl+\` to forcibly kill the shim. The shim is multi-threaded, not multi-process, so this will correctly terminate it.
-- **(Clarification)** The shim __requires__ that all outbound packets have a source mac adress beginning with the byte `0xFE`, so your shrub must assign mac addresses to its interfaces for sending which begin with that byte.
+- **(Clarification)** The shim __requires__ that all outbound packets have a source mac adress beginning with the bytes `5E:FE`, so your shrub must assign mac addresses to its interfaces for sending which begin with that byte.
 	- Additionally your shrub will need to forward packets with a specific MAC address for the next hop because `BOWTIE.sh` has a network with 3 routers. 
 	
 		Since ARP is optional, I recommend forming MAC adresses using the IP address like so:
 
-		```172.31.128.254 -> fe:ac:1f:80:fe:00```
+		```172.31.128.254 -> 5e:fe:ac:1f:80:fe```
 		
-		(Note that `172.31.128.254` in hex is `ac.1f.80.fe`, so this is just inserting the IPv4 address into the MAC address with fixed start and end bytes.)
+		(Note that `172.31.128.254` in hex is `ac.1f.80.fe`, so this is just inserting the IPv4 address into the MAC address with fixed start and end bytes. The first two bytes come from the IANA standard for embedding IPv4 addresses in your MAC address. See [RFC 9542](https://www.rfc-editor.org/rfc/rfc9542.html) )
 - **(Clarification)** The shim will display a warning when it writes the first packet:  
 	- `WARNING: PcapWriter: unknown LL type for bytes. Using type 1 (Ethernet)`
 - **(Clarification)** For debugging there are a few useful tools present.
 	<details>
   	<summary>Expand</summary>
-	
+
 	- For debugging checksums, Wireshark can check them for you and let you know if they are right or not. To enable this for UDP and IPv4, open wireshark and navigate to:
 		- `Edit -> Preferences -> Protocols -> IPv4` and check
 			- [x] ` Validate the IPv4 checksum if possible`
