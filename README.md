@@ -12,17 +12,14 @@ This README details the tools available for the Twig and Shrub projects. This ve
 - [Testing](README.md#testing)
 
 ### Tools:
-
 - [shim.py](README.md#shimpy)
 - [socket_time.c](README.md#socket_timec)
 - [udpping](README.md#udpping)
 - [make_pcap.sh](README.md#make_pcapsh)
 - [twig_test.sh](README.md#twig_testsh)
-
 - [docker_test.sh](README.md#docker_testsh)
 - [dockershim.sh](README.md#dockershimsh)
 - [cleandocker.sh](README.md#cleandockersh)
-
 - [CHAIN.sh](README.md#chainsh)
 - [BOWTIE.sh](README.md#bowtiesh)
 
