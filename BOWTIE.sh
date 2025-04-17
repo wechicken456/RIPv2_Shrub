@@ -1,6 +1,6 @@
 #!/bin/sh
 TOOLDIR=.
-PROGRAM="twig" ## allow specifying a different name for shub program.
+PROGRAM="shrub" ## allow specifying a different name for shub program.
 
 #
 # enable debugging if requested
