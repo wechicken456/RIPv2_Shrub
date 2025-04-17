@@ -61,6 +61,7 @@ def write_packetlist(capwriter, iface_mac, pkt):
 	if pkt[Ether].src.startswith("fe:"):
 		## dont forward packets from the inside of the network back into it
 		return
+
 	
 	pkt[Ether].dst = "ff:ff:ff:ff:ff:ff"
 
@@ -103,7 +104,7 @@ def sniff_pcap(stop_threads, capfile, network):
 
 			## do NOT forward packets from the outside interface back to it, and do not forward MAC broadcast packets out of our pcap network.
 			## also do NOT forward packets which do not have fe:... as their source adress. all packets sent from shrubs will have fe:... as sources.
-			if not pkt[Ether].src.startswith("fe:") : ## iface_mac == pkt[Ether].src or pkt[Ether].dst == 'ff:ff:ff:ff:ff:ff' or 
+			if not pkt[Ether].src.startswith("5e:fe:") : ## iface_mac == pkt[Ether].src or pkt[Ether].dst == 'ff:ff:ff:ff:ff:ff' or 
 				if(args.debug > 2):
 					print("packet not for me, mac doesnt match...")
 				continue

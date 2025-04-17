@@ -22,6 +22,9 @@ docker network create "--subnet=${DNETCIDR}" "${DNETNAME}"
 echo "Adding ip route for shim traffic (${SHIMCIDR}) via ${DCONADDR}"
 sudo ip route add "${SHIMCIDR}" via "${DCONADDR}"
 
+## make pcap so it doesnt get made as root.
+./make_pcap.sh "${SHIMPCAP}"
+
 ## now we start a container from the image
 echo "Starting docker container with name ${DCONNAME} and ip ${DCONADDR}"
 docker run --name "${DCONNAME}" --net "${DNETNAME}" --ip "${DCONADDR}" --mount type=bind,src=.,dst=/usr/local/twig --rm -it "${DIMGNAME}"
