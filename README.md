@@ -45,6 +45,7 @@ This README details the tools available for the Twig and Shrub projects. This ve
 - **(Clarification)** For debugging there are a few useful tools present.
 	<details>
   	<summary>Expand</summary>
+	
 	- For debugging checksums, Wireshark can check them for you and let you know if they are right or not. To enable this for UDP and IPv4, open wireshark and navigate to:
 		- `Edit -> Preferences -> Protocols -> IPv4` and check
 			- [x] ` Validate the IPv4 checksum if possible`
