@@ -563,9 +563,6 @@ traceroute to 172.31.5.254 (172.31.5.254), 30 hops max, 60 byte packets
 
 #### Test 2 (BOWTIE.sh)
 
-**NOTE: I plan to have an additional test where we bring down router `T` and test that RIP recovers to route to `P` via `R`, `Q`, but details arent finished yet. Once it is finished, I'll put out an announcement on Canvas and talk about it in class. ~Silas  PS. the router name notation is from the [BOWTIE.sh](README.md#bowtiesh) section.**
-
-
 ##### Running without Docker
 
 <details>
@@ -1299,6 +1296,9 @@ When run the script will output the commands used to start your shrubs, which in
 
 See [Testing#CHAIN.sh](README.md#test-1-chainsh) for details on running and testing with this script.
 
+
+*Note: the links dont expand content, so you may need to navigate manually still... Sorry!*
+
 </details>
 
 ## BOWTIE.sh
@@ -1344,6 +1344,8 @@ To make targeting specific routers easier, the following is a table which shows 
 | **V** | 172.31.6.207/24 |  |
 | **V** | 172.31.8.207/24 | S |
 
-See [Testing#BOWTIE.sh](README.md#test-2-bowtiesh) for details on running and testing with this script.
+See [Testing#BOWTIE.sh](README.md#test-2-bowtiesh) for details on running and testing with this script. 
+
+*Note: the links dont expand content, so you may need to navigate manually still... Sorry!*
 
 </details>
