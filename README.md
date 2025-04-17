@@ -2,11 +2,6 @@
 
 This README details the tools available for the Twig and Shrub projects. This version of the README is dedicated to the shrub project.
 
-**NOTE: The testing section is outdated. For now, use the [CHAIN.sh](README.md#chainsh) section to test routing with your shrub.**
-
-*(This note will be removed once the testing section is up to date and completed.)*
-
-
 ## Outline 
 
 ### Main Sections:
