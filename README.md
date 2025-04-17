@@ -193,7 +193,7 @@ If you need to restart your shrub, then also restart the shim, but no other acti
 To fully shut down all components of this project and return everything to the original state, we need to do the following:
 
 - Kill the shim script
-- Kill twig
+- Kill shrub
 - On the *ping machine*, run
 ```
 sudo ip r del 172.31.0.0/16
