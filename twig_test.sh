@@ -78,7 +78,11 @@ IFACE_ARG="${ADDRESS}_${PREFIX}"
 ## make the pcap file
 ## NOTE: this overwrites any existing file of the same name.
 
-./make_pcap.sh "${PCAP_NAME}"
+if [ $(id -u) = 0 ]; then
+	echo "running as root, so not creating the pcap file for the shim, it should be made by a user account."
+else
+	./make_pcap.sh "${PCAP_NAME}"
+fi
 
 # os_name=$(uname -s)
 
