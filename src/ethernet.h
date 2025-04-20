@@ -23,10 +23,12 @@ struct arp_ipv4_hdr {
     uint8_t     tpa[4];
 };
 
-extern std::map<uint32_t, uint32_t> arp_cache;
+/* MAC to IPv4 and IPv6 */
+extern std::map<uint64_t, uint32_t> arp_cache_v4;
+extern std::map<uint64_t, uint64_t> arp_cache_v6;
 
 void print_ethernet(struct eth_hdr *peh);
-void print_arp(struct arp_ipv4_hdr *arp_frame);
+void process_arp(struct arp_ipv4_hdr *arp_frame);
 
 /* return an integer indicating the length of the ethernet packet (including encapsulated packets).
  * Note that this function only allocates the ethernet header, and not the encapsulated packets. The rest of the packet lives in the iov array.

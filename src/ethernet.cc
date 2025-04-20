@@ -9,7 +9,7 @@ void print_ethernet(struct eth_hdr *peh) {
         peh->h_source[3], peh->h_source[4], peh->h_source[5], c[0], c[1]);
 }
 
-void print_arp(struct arp_ipv4_hdr *arp_frame) {
+void process_arp(struct arp_ipv4_hdr *arp_frame) {
     reverse_assign(&(arp_frame->h_type), sizeof(arp_frame->h_type));
     reverse_assign(&(arp_frame->op), sizeof(arp_frame->op));
 
@@ -35,7 +35,10 @@ void print_arp(struct arp_ipv4_hdr *arp_frame) {
     else print_addr_6(arp_frame->tpa);
     puts("\t");
 
-    //arp_cache[*(uint32_t*)orig_eth->h_source] = *(uint32_t*)iph->src_addr;  // both in key and val network byte order
+    if (*(uint16_t*)arp_frame->op != 1) {   // ARP reply
+        if (arp_frame->hlen_plen[1] == 4) arp_cache_v4[*(uint64_t*)arp_frame->sha] = *(uint32_t*)arp_frame->spa;  // both in key and val network byte order
+        else arp_cache_v6[*(uint64_t*)arp_frame->sha] = *(uint64_t*)arp_frame->spa;  // both in key and val network byte order
+    }
 }
 
 int process_ethernet(unsigned char *in_packet, int iov_idx) {
@@ -73,7 +76,7 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
             iov_cnt++;
             return ret + sizeof(struct eth_hdr);
         case ETHERTYPE_ARP:
-            print_arp((struct arp_ipv4_hdr *)(in_packet + sizeof(struct eth_hdr)));
+            process_arp((struct arp_ipv4_hdr *)(in_packet + sizeof(struct eth_hdr)));
             break;
         default:
             break;
