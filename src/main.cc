@@ -3,7 +3,9 @@
 #include "ipv4.h"
 #include "utils.h"
 #include "ethernet.h"
-#include <map>
+
+#include<pthread.h>
+#include<map>
 /* this normally comes from the pcap.h header file, but we'll just be using
  * a few specific pieces, so we'll add them here
  *
@@ -34,17 +36,29 @@ struct pcap_pkthdr {
 	bpf_u_int32 len;	/* length of this packet (off wire) */
 };
 
+struct interface {
+    uint32_t ipv4_addr; 
+    uint32_t mask_length;
+    uint32_t ipv6_addr;
+    uint64_t mac_addr;
+    int mtu;
+    // since we're reading & writing to the same file, we need 2 different FDs 
+    // so that the write one can have O_APPEND that will always seek to the EOF to write so we don't overwrite incoming packet
+    int pcap_fd_read;
+    int pcap_fd_write;
+};
+
+
+struct interface interfaces[10];
+int num_interfaces = 0;
+__thread int my_interface_idx;
+
 char tcp_flag_string[] = "FSRPAU"; 
-uint32_t my_ipv4_addr;
-uint32_t mask_length;
+
 int debug = 0;
 int resolveDNS = 1;
 int reverseEndian = 0;
 
-// since we're reading & writing to the same file, we need 2 different FDs 
-// so that the write one can have O_APPEND that will always seek to the EOF to write so we don't overwrite incoming packets
-int pcap_fd_read;
-int pcap_fd_write;
 struct pcap_file_header pfh;
 
 /* iov is the array of iovecs that will be used to write the REPLY packets to the pcap file
@@ -61,7 +75,7 @@ std::map<uint64_t, uint32_t> arp_cache_v4;
 std::map<uint64_t, uint64_t> arp_cache_v6;
 
 /* write pcap header + `len` bytes from `data` to the packet capture file `pcap_fd` */
-void write_pcap() {
+void write_pcap(int interface_idx) {
     struct pcap_pkthdr *pcap_hdr = (struct pcap_pkthdr *)malloc(sizeof(struct pcap_pkthdr));
     // write the pcap header
     struct timeval tv;
@@ -84,7 +98,7 @@ void write_pcap() {
     iov[0].iov_len = sizeof(struct pcap_pkthdr);
     total_len += sizeof(struct pcap_pkthdr);
 
-    ret = writev(pcap_fd_write, iov, iov_cnt);
+    ret = writev(interfaces[interface_idx].pcap_fd_write, iov, iov_cnt);
     if (ret != total_len) { // MUST write all bytes to consider it a success
         perror("writev");
         return;
@@ -99,16 +113,16 @@ void write_pcap() {
     iov_cnt = 1;
 }
 
-/* open .dmp pcap file (2 separate fds for read and write) and verify its header */
-void setup(char *filename) {
+/* open .dmp pcap file (2 separate fds for read and write) for the `interface_idx`-th interface and verify its header */
+void setup(char *interface_arg, int interface_idx) {
     // get pcap filename in the form X.X.X.0_masklength first, then open pcap it
-    int l = strlen(filename);
+    int l = strlen(interface_arg);
     char *_filename = (char*)malloc(l + 6);
-    if (get_ip_and_filename(filename, _filename, &my_ipv4_addr) != 0) {
+    if (get_ip_and_filename(interface_arg, _filename, interface_idx) != 0) {
         exit(123);
     }
-    pcap_fd_read = open(_filename, O_RDONLY);
-    pcap_fd_write = open(_filename, O_WRONLY | O_APPEND);
+    int pcap_fd_read = open(_filename, O_RDONLY);
+    int pcap_fd_write = open(_filename, O_WRONLY | O_APPEND);
     if (pcap_fd_read < 0 || pcap_fd_write < 0) {
         perror(_filename);
         exit(1);
@@ -148,24 +162,23 @@ void setup(char *filename) {
     printf("header magic: %x\n", PCAP_MAGIC_LITTLE);
     printf("header version: %d %d\n", pfh.version_major, pfh.version_minor);
     printf("header linktype: %d\n\n", pfh.linktype);
+
+    interfaces[interface_idx].pcap_fd_read = pcap_fd_read;
+    interfaces[interface_idx].pcap_fd_write = pcap_fd_write;
 }
 
-void loop() {
+void loop(int interface_idx) {
+    my_interface_idx = interface_idx;
     unsigned char* in_packet = (unsigned char*)malloc(2 << 20);
+    int pcap_fd_read = interfaces[interface_idx].pcap_fd_read;
+    int pcap_fd_write = interfaces[interface_idx].pcap_fd_write;
 	/* now read each packet in the file */
 	while (1) {
 
 		/* read the pcap_packet_header, then print as requested */
         struct pcap_pkthdr pph;
         int ret = read(pcap_fd_read, &pph, sizeof(pph));
-
-        /* get cur pos in read */
-        off_t cur_pos = lseek(pcap_fd_read, 0, SEEK_CUR);
-        if (cur_pos == -1) {
-            perror("lseek");
-            exit(1);
-        }
-
+        
         if (ret < 0) {
             perror("read");
             exit(1);
@@ -228,7 +241,7 @@ void loop() {
                 fprintf(stderr, "process_ethernet returned with 0.\n"); 
                 continue;
             }
-            write_pcap();
+            write_pcap(pcap_fd_write);
         } 
 	}
 }
@@ -245,7 +258,7 @@ void print_help() {
 
 int main(int argc, char *argv[])    
 {
-	char *filename = NULL;
+	char *interface_arg = NULL;
     if (argc < 2) {
         fprintf(stderr, "No interface provided. Check -i option.\n");
         print_help();
@@ -257,7 +270,14 @@ int main(int argc, char *argv[])
             debug++;
         } else if (strcmp(argv[i], "-i") == 0) {
             i++;
-            filename = argv[i];
+            interface_arg = argv[i];
+            if (interface_arg == NULL) {
+                fprintf(stderr, "No interface provided. Check -i option.\n");
+                print_help();
+                exit(99);
+            }
+            setup(interface_arg, num_interfaces);
+            num_interfaces++;
         } else if (strcmp(argv[i], "-h") == 0) {
             print_help();
             exit(0);
@@ -267,12 +287,8 @@ int main(int argc, char *argv[])
             exit(99);
         }
     }
-    if (filename == NULL) {
-        fprintf(stderr, "No interface provided. Check -i option.\n");
-        print_help();
-        exit(99);
+    for (int i = 0 ; i < num_interfaces; i++) {
+        loop(i);
     }
-	setup(filename);
-    loop();
 }
 

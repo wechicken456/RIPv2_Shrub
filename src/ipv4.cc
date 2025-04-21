@@ -12,12 +12,12 @@
 int process_ipv4(unsigned char *in_packet, int iov_idx) {
     struct ipv4_hdr *hdr = (struct ipv4_hdr *)in_packet;
     unsigned int ipv4_hdr_len = (hdr->version_ihl & 0b1111) << 2;
-
+    int dst_interface_idx = -1;
     
     /* if not meant for us, discard it */
-    if (ntohl(*(uint32_t*)&hdr->dst_addr) != my_ipv4_addr) {
-        printf("process_ipv4: Not for us...\n");
-        return 0;
+    if (interfaces[my_interface_idx].ipv4_addr != ntohl(*(uint32_t*)&hdr->dst_addr)) {
+        fprintf(stderr, "[!] Not for us.\n");
+        return -1;
     }
 
     // verify IPv4 checksum

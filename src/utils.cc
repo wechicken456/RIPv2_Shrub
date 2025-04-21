@@ -45,7 +45,7 @@ void print_addr_4(uint8_t *addr) {
     printf("%u", addr[3]);
 }
 
-// convert an IP string "X.X.X.X" to a binary buffer
+// convert an IP string "X.X.X.X" to a binary buffer, and assign it to out_ipv4_addr
 int ip_string_to_uint(char *ip_str, uint32_t *out_ipv4_addr) {
     struct sockaddr_in sa;
     if (inet_pton(AF_INET, ip_str, &(sa.sin_addr)) != 1) {  // 1 is for success
@@ -56,23 +56,24 @@ int ip_string_to_uint(char *ip_str, uint32_t *out_ipv4_addr) {
 }
 // extract X.X.X.Y and X.X.X.0_24 from X.X.X.Y_24. 
 // The first one is our assigned the ip address, while the 2nd one is the name of the .dmp file to read/write network traffic from.
+// Write the extracted IPv4 addr and mask length to the interface struct at interface_idx.
 // return 0 if success, anything otherwise.
-int get_ip_and_filename(char *in_str, char *out_filename, uint32_t *out_ipv4_addr) {
+int get_ip_and_filename(char *in_str, char *out_filename, int interface_idx) {
     char *input_copy = strdup(in_str);
     
     char *ip_addr_end = strchr(input_copy, (int)'_');
-    char *_mask_length = ip_addr_end + 1;
-    mask_length = atoi(_mask_length);
+    char *mask_length = ip_addr_end + 1;
+    interfaces[interface_idx].mask_length = atoi(mask_length);
     if (ip_addr_end != NULL) {         
         *ip_addr_end = '\0'; // now input_copy is '_' -truncated
-        if (ip_string_to_uint(input_copy, out_ipv4_addr) != 0) {    // extract host ip address, also check if the provided X.X.X.Y is valid IP string
+        if (ip_string_to_uint(input_copy, &interfaces[interface_idx].ipv4_addr) != 0) {    // extract host ip address, also check if the provided X.X.X.Y is valid IP string
             return -1;
         }
         
-        char *Y = strrchr(in_str, (int)'.') + 1;    // get ptr to Y from X.X.X.Y_24
-        int l = Y - in_str;
-        memcpy(out_filename, in_str, l);
-        memcpy(out_filename + l , "0_24.dmp\0", 9);
+        int l = sprintf(out_filename, "%s.0_%d.dmp", in_str, interfaces[interface_idx].mask_length);
+        if (l < 0) {
+            return -1;
+        }
         return 0;
     }
     return -1;

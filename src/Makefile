@@ -30,3 +30,4 @@ $(MAIN_OBJECTS): $(HEADERS)
 
 clean:
 	rm -f $(TARGET) *.o *.dmp.myoutput *.dmp.correct
+	rm ../$(TARGET) ../$(SOCKET_TIME_TARGET)

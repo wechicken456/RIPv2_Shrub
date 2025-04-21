@@ -37,6 +37,22 @@ typedef int32_t bpf_int32;
 typedef u_int32_t bpf_u_int32;
 
 
+struct interface {
+    uint32_t ipv4_addr; 
+    uint32_t mask_length;
+    uint32_t ipv6_addr;
+    uint64_t mac_addr;
+    int mtu;
+    // since we're reading & writing to the same file, we need 2 different FDs 
+    // so that the write one can have O_APPEND that will always seek to the EOF to write so we don't overwrite incoming packet
+    int pcap_fd_read;
+    int pcap_fd_write;
+};
+
+struct interface interfaces[10];
+extern int num_interfaces;
+extern __thread int my_interface_idx; 
+
 extern char tcp_flag_string[]; 
 extern uint32_t my_ipv4_addr;
 extern uint32_t mask_length;

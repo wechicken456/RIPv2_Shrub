@@ -8,8 +8,7 @@ void print_addr_4(uint8_t *addr);
 void print_addr_6(uint8_t *addr);
 
 int ip_string_to_uint(char *ip_str, uint32_t *out_ipv4_addr);
-int get_ip_and_filename(char *in_str, char *out_filename, uint32_t *out_ipv4_addr);
-
+int get_ip_and_filename(char *in_str, char *out_filename, int interface_idx); 
 void reverse_assign(void *_ptr, int len); 
 /* compute checksum for an incoming requesta
 Initially, the checksum field of the sender is 0.

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 TOOLDIR=.
 PROGRAM="shrub" ## allow specifying a different name for shub program.
 
