@@ -108,7 +108,10 @@ Requirements are listed in **bold**, suggested optional software is *italicized*
 - **One machine**
 	- root access
 - **docker** [(Installation Instructions)](https://docs.docker.com/engine/install/) 
-	- Ignore any prompt to install docker desktop, it is reportedly broken on windows at the moment.
+	- Ignore any prompt to install docker desktop.
+	- If you already are using docker desktop, that *WILL NOT WORK* with these scripts. You need docker engine. 
+		- If you are running desktop, you can potentially just switch contexts back to the default using `docker context use default` and make sure the docker engine is started (check that `systemctl status docker` says it is running). 
+		- This hasnt been tested as of yet, so some additional tweaks may be required.
 - **ping**
 - **traceroute**
 - **gcc**
