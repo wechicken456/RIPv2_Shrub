@@ -16,7 +16,7 @@ void print_icmp(struct icmp_hdr *hdr) {
  */
 int process_icmp(unsigned char *icmp_packet, int pkt_len, int iov_idx) {
     struct icmp_hdr *hdr = (struct icmp_hdr *)icmp_packet;
-    print_icmp(hdr);
+    //print_icmp(hdr);
 
     if (hdr->type == ICMP_TYPE_ECHO) {
         if (verify_cksum(hdr, sizeof(struct icmp_hdr))) {   // S + ~S === 0xFFFF
@@ -52,7 +52,7 @@ int process_icmp(unsigned char *icmp_packet, int pkt_len, int iov_idx) {
 
     } else if (hdr->type == ICMP_TYPE_ECHO_REPLY) {
         printf("Received ICMP reply: \n");
-        print_icmp(hdr);
+        //print_icmp(hdr);
     } else {
         printf("Sorry, we only support ICMP echo and echo replies right now :(");
     }

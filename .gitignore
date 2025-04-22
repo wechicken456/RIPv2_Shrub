@@ -6,3 +6,6 @@
 submit.zip
 socket_time
 twig
+shrub
+udp_ping/udpping
+**/*.o

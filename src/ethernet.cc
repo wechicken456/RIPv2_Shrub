@@ -9,7 +9,7 @@ void print_ethernet(struct eth_hdr *peh) {
         peh->h_source[3], peh->h_source[4], peh->h_source[5], c[0], c[1]);
 }
 
-void process_arp(struct arp_ipv4_hdr *arp_frame) {
+int process_arp(struct arp_ipv4_hdr *arp_frame) {
     reverse_assign(&(arp_frame->h_type), sizeof(arp_frame->h_type));
     reverse_assign(&(arp_frame->op), sizeof(arp_frame->op));
 
@@ -39,6 +39,7 @@ void process_arp(struct arp_ipv4_hdr *arp_frame) {
         if (arp_frame->hlen_plen[1] == 4) arp_cache_v4[*(uint64_t*)arp_frame->sha] = *(uint32_t*)arp_frame->spa;  // both in key and val network byte order
         else arp_cache_v6[*(uint64_t*)arp_frame->sha] = *(uint64_t*)arp_frame->spa;  // both in key and val network byte order
     }
+    return 0;
 }
 
 
@@ -80,9 +81,11 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
                 exit(1);
             }
 
-            // Copy Ethernet header from original packet and swap MAC addresses
-            memcpy(new_eth->h_dest, orig_eth->h_source, 6);   
-            memcpy(new_eth->h_source, orig_eth->h_dest, 6);    
+            /* Hardcode source addresss's first 2 bytes to 5e:fe as per the testing instructions and how the shim.py works */
+            memcpy(new_eth->h_dest, orig_eth->h_source, 6);
+            new_eth->h_source[0] = 0x5e;
+            new_eth->h_source[1] = 0xfe;
+            memcpy(new_eth->h_source + 2, &interfaces[thread_interface_idx].ipv4_addr, 4);    
             new_eth->h_proto = htons(ETHERTYPE_IPV4);    
 
             iov[iov_idx].iov_base = new_eth;
@@ -90,7 +93,7 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
             iov_cnt++;
             return ret + sizeof(struct eth_hdr);
         case ETHERTYPE_ARP:
-            process_arp((struct arp_ipv4_hdr *)(in_packet + sizeof(struct eth_hdr)));
+            ret = process_arp((struct arp_ipv4_hdr *)(in_packet + sizeof(struct eth_hdr)));
             break;
         default:
             break;

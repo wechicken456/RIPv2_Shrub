@@ -63,7 +63,7 @@ std::map<uint64_t, uint32_t> arp_cache_v4;
 std::map<uint64_t, uint64_t> arp_cache_v6;
 
 /* write pcap header + `len` bytes from `data` to the packet capture file `pcap_fd` */
-void write_pcap(int interface_idx) {
+void write_pcap(int pcap_fd) {
     struct pcap_pkthdr *pcap_hdr = (struct pcap_pkthdr *)malloc(sizeof(struct pcap_pkthdr));
     // write the pcap header
     struct timeval tv;
@@ -86,7 +86,7 @@ void write_pcap(int interface_idx) {
     iov[0].iov_len = sizeof(struct pcap_pkthdr);
     total_len += sizeof(struct pcap_pkthdr);
 
-    ret = writev(interfaces[interface_idx].pcap_fd_write, iov, iov_cnt);
+    ret = writev(pcap_fd, iov, iov_cnt);
     if (ret != total_len) { // MUST write all bytes to consider it a success
         perror("writev");
         return;
@@ -162,7 +162,8 @@ void* loop(void* _interface_idx) {
     int pcap_fd_read = interfaces[interface_idx].pcap_fd_read;
     int pcap_fd_write = interfaces[interface_idx].pcap_fd_write;
     int ret;
-	/* now read each packet in the file */
+ 
+    /* now read each packet in the file */
 	while (1) {
 
 		/* read the pcap_packet_header, then print as requested */
@@ -280,10 +281,12 @@ int main(int argc, char *argv[])
         }
     }
 
+    if (debug) printf("Total number of interfaces: %d\n\n", num_interfaces);
     pthread_t threads[num_interfaces];
     int ret;
     for (int i = 0 ; i < num_interfaces; i++) {
-        ret = pthread_create(&threads[i], NULL, loop, (void*)&i);
+        int idx = i;
+        ret = pthread_create(&threads[i], NULL, loop, (void*)&idx);
         if (ret < 0) {
             fprintf(stderr, "[!] Failed to create thread for interface %d. ABORTING!!!\n", i);
             exit(1337);

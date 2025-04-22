@@ -28,7 +28,7 @@ extern std::map<uint64_t, uint32_t> arp_cache_v4;
 extern std::map<uint64_t, uint64_t> arp_cache_v6;
 
 void print_ethernet(struct eth_hdr *peh);
-void process_arp(struct arp_ipv4_hdr *arp_frame);
+int process_arp(struct arp_ipv4_hdr *arp_frame);
 
 /* return an integer indicating the length of the ethernet packet (including encapsulated packets).
  * Note that this function only allocates the ethernet header, and not the encapsulated packets. The rest of the packet lives in the iov array.

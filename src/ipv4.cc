@@ -13,7 +13,7 @@
 int process_ipv4(unsigned char *in_packet, int iov_idx) {
     struct ipv4_hdr *hdr = (struct ipv4_hdr *)in_packet;
     unsigned int ipv4_hdr_len = (hdr->version_ihl & 0b1111) << 2;
-    
+
     /* if not meant for us (the interface this thread is responsible for reading from), or it is from us, ignore it */
     if (interfaces[thread_interface_idx].ipv4_addr != ntohl(*(uint32_t*)&hdr->dst_addr)) {
         if (debug) fprintf(stderr, "[*] Not for us. Ignoring...\n");
