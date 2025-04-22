@@ -70,7 +70,8 @@ int get_ip_and_filename(char *in_str, char *out_filename, int interface_idx) {
             return -1;
         }
         
-        int l = sprintf(out_filename, "%s.0_%d.dmp", in_str, interfaces[interface_idx].mask_length);
+        strrchr(input_copy, '.')[0] = '\0'; // replace the last '.' with '0' to get the network address
+        int l = sprintf(out_filename, "%s.0_%d.dmp", input_copy, interfaces[interface_idx].mask_length);
         if (l < 0) {
             return -1;
         }

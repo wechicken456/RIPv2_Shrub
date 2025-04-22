@@ -49,9 +49,9 @@ struct interface {
     int pcap_fd_write;
 };
 
-struct interface interfaces[10];
+extern struct interface interfaces[10];
 extern int num_interfaces;
-extern __thread int my_interface_idx; 
+extern __thread int thread_interface_idx; 
 
 extern char tcp_flag_string[]; 
 extern uint32_t my_ipv4_addr;
@@ -66,6 +66,7 @@ extern int reverseEndian;
  * iov_cnt is the number of iovecs in the array used to write ONE COMPLETE (all protocols) REPLY packet to the pcap file
  * iov_cnt is incremented each time a new protocol is added to the REPLY packet, and reset to 0 each time a new COMPLETE REPLY packet is written.
  */
-extern struct iovec iov[];
-extern int iov_cnt;;
+extern __thread struct iovec iov[];
+extern __thread int iov_cnt;
+
 #endif

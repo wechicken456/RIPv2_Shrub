@@ -6,7 +6,7 @@ SOCKET_TIME_TARGET=socket_time
 SOCKET_TIME_SRC=$(SOCKET_TIME_TARGET).c
 SOCKET_TIME_OBJ=$(SOCKET_TIME_TARGET).o
 
-TARGET=twig
+TARGET=shrub
 SRCS=${wildcard *.cc}
 MAIN_SRCS=$(filter-out $(SOCKET_TIME_SRC), $(SRCS)) 
 MAIN_OBJECTS=${MAIN_SRCS:.cc=.o} # compile all .cc except socket_time.c

@@ -36,22 +36,10 @@ struct pcap_pkthdr {
 	bpf_u_int32 len;	/* length of this packet (off wire) */
 };
 
-struct interface {
-    uint32_t ipv4_addr; 
-    uint32_t mask_length;
-    uint32_t ipv6_addr;
-    uint64_t mac_addr;
-    int mtu;
-    // since we're reading & writing to the same file, we need 2 different FDs 
-    // so that the write one can have O_APPEND that will always seek to the EOF to write so we don't overwrite incoming packet
-    int pcap_fd_read;
-    int pcap_fd_write;
-};
-
 
 struct interface interfaces[10];
 int num_interfaces = 0;
-__thread int my_interface_idx;
+__thread int thread_interface_idx;
 
 char tcp_flag_string[] = "FSRPAU"; 
 
@@ -67,8 +55,8 @@ struct pcap_file_header pfh;
  * iov_cnt is the number of iovecs in the array used to write ONE COMPLETE (all protocols) REPLY packet to the pcap file
  * iov_cnt is incremented each time a new protocol is added to the REPLY packet, and reset to 0 each time a new COMPLETE REPLY packet is written.
  */
-struct iovec iov[10];
-int iov_cnt = 0;
+__thread struct iovec iov[10];
+__thread int iov_cnt = 0;
 
 /* MAC to IPv4 and IPv6 */
 std::map<uint64_t, uint32_t> arp_cache_v4;
@@ -167,28 +155,30 @@ void setup(char *interface_arg, int interface_idx) {
     interfaces[interface_idx].pcap_fd_write = pcap_fd_write;
 }
 
-void loop(int interface_idx) {
-    my_interface_idx = interface_idx;
+void* loop(void* _interface_idx) {
+    int interface_idx = *(int*)_interface_idx;
+    thread_interface_idx = interface_idx;
     unsigned char* in_packet = (unsigned char*)malloc(2 << 20);
     int pcap_fd_read = interfaces[interface_idx].pcap_fd_read;
     int pcap_fd_write = interfaces[interface_idx].pcap_fd_write;
+    int ret;
 	/* now read each packet in the file */
 	while (1) {
 
 		/* read the pcap_packet_header, then print as requested */
         struct pcap_pkthdr pph;
-        int ret = read(pcap_fd_read, &pph, sizeof(pph));
+        ret = read(pcap_fd_read, &pph, sizeof(pph));
         
         if (ret < 0) {
             perror("read");
-            exit(1);
+            pthread_exit(&ret);
         } else if (ret == 0) {       // EOF, wait a little bit before trying again            
             usleep(10000);
             continue;   
         }
         else if (ret < (int)sizeof(pph)) {
             printf("truncated packet header: only %d bytes\n", ret);
-            exit(1);
+            pthread_exit(&ret);
         }
 
         if (reverseEndian) {
@@ -201,11 +191,11 @@ void loop(int interface_idx) {
         ret = read(pcap_fd_read, in_packet, pph.caplen);        
         if (ret < 0) {
             perror("read");
-            exit(1);
+            pthread_exit(&ret);
         } else if (ret == 0) break;    // EOF
         else if (ret < (int)pph.caplen) {
             printf("truncated packet: only %d bytes\n", ret);
-            exit(1);
+            pthread_exit(&ret);
         }
         in_packet[ret] = '\0';
         
@@ -221,8 +211,9 @@ void loop(int interface_idx) {
          // some format printing stuffs
         char *tmp = (char*)malloc(30);
         if (!tmp) {
+            ret = 1234;
             perror("malloc:");
-            exit(123);
+            pthread_exit(&ret);
         }
         long double f = pph.ts_secs;
         f += (pph.ts_usecs / 1000000.0);
@@ -238,12 +229,13 @@ void loop(int interface_idx) {
                 fprintf(stderr, "process_ethernet failed.\n");
                 break;
             } else if (ret == 0) {
-                fprintf(stderr, "process_ethernet returned with 0.\n"); 
+                if (debug) fprintf(stderr, "process_ethernet returned with 0.\n"); 
                 continue;
             }
             write_pcap(pcap_fd_write);
         } 
 	}
+    pthread_exit(&ret);
 }
 
 void print_help() {
@@ -287,8 +279,26 @@ int main(int argc, char *argv[])
             exit(99);
         }
     }
+
+    pthread_t threads[num_interfaces];
+    int ret;
     for (int i = 0 ; i < num_interfaces; i++) {
-        loop(i);
+        ret = pthread_create(&threads[i], NULL, loop, (void*)&i);
+        if (ret < 0) {
+            fprintf(stderr, "[!] Failed to create thread for interface %d. ABORTING!!!\n", i);
+            exit(1337);
+        }
     }
+
+    for (int i = 0 ; i < num_interfaces; i++) {
+        int *ret_ptr;
+        ret = pthread_join(threads[i], (void**)&ret_ptr);
+        if (ret != 0) {
+            perror("pthread_join");
+            exit(1338);
+        }
+        printf("pthread_join: thread %d exitted with status %d\n", i, *ret_ptr);
+    }
+    return 0;
 }
 
