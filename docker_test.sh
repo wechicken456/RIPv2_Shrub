@@ -7,6 +7,8 @@ DCONNAME="twigcontainer"
 DCONADDR="172.31.127.254"
 SHIMCIDR="172.31.0.0/16"
 
+SHIMPCAP="172.31.128.0_24.dmp"
+
 ## if the first argument is --rm, then clean up the docker network and ip route when we're done.
 cleanup="$1"
 
