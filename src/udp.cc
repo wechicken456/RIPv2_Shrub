@@ -29,6 +29,7 @@ uint16_t udp_cksum(unsigned short *udp_datagram, uint16_t *ip_src, uint16_t *ip_
     sum = (sum >> 16) + (sum & 0xFFFF); // step 2
     
     sum += htons(IPPROTO_UDP);
+    //sum += IPPROTO_UDP;
     sum += htons(udp_len);
 
     sum = (sum >> 16) + (sum & 0xFFFF); // step 2
@@ -58,12 +59,21 @@ uint16_t udp_cksum(unsigned short *udp_datagram, uint16_t *ip_src, uint16_t *ip_
  * where iov_idx (defined in `main.c`, included in `include.h`) i37s the index of the iov array to which the REPLY ICMP packet will be written. 
  */
 int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_addr, uint16_t udp_len, int iov_idx) {
-    //print_udp((struct udp_hdr *)udp_datagram);
+    if (debug) {
+        printf("[*] Received UDP datagram:\n");
+        printf("\tUDP len:\t%u\n", udp_len);
+    }
+    print_udp((struct udp_hdr *)udp_datagram);
 
-    /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. */
-    uint16_t in_cksum = udp_cksum((unsigned short*)udp_datagram, src_addr, dst_addr, udp_len);
-     if (in_cksum != 0) {   // should add to 0 as we already added the original checksum. S + ~S === 0
-         fprintf(stderr, "[!] INVALID UDP CHECKSUM: %u\n", in_cksum);
+    /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. 
+     * To verify the received cksum, extract it, then set the field to 0 to calculate the checksum ourselves
+     * then compare the calculated checksum with the original checksum.
+     */
+    uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
+    ((struct udp_hdr *)udp_datagram)->cksum = 0;
+    uint16_t our_cksum = udp_cksum((unsigned short*)udp_datagram, src_addr, dst_addr, udp_len);
+     if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
+         fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
          return -1;
      }    
     
