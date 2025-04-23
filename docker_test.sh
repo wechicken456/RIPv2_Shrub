@@ -8,7 +8,6 @@ DCONADDR="172.31.127.254"
 SHIMCIDR="172.31.0.0/16"
 
 SHIMPCAP="172.31.128.0_24.dmp"
-
 ## if the first argument is --rm, then clean up the docker network and ip route when we're done.
 cleanup="$1"
 
@@ -23,6 +22,11 @@ docker network create "--subnet=${DNETCIDR}" "${DNETNAME}"
 ## add ip route for twig traffic, directing it via the docker container we're about to run.
 echo "Adding ip route for shim traffic (${SHIMCIDR}) via ${DCONADDR}"
 sudo ip route add "${SHIMCIDR}" via "${DCONADDR}"
+
+## disable checksum offloading cause my (tin) shrub needs to validate checksum and will terminate if invalid.
+IFACE_NAME=`netstat -nr | grep 172.31.0.0 | awk -F ' ' '{print $8}'`
+echo "Disabling checksum offloading on interface $IFACE_NAME"
+sudo ethtool --offload $IFACE_NAME rx off tx off
 
 ## make pcap so it doesnt get made as root.
 ./make_pcap.sh "${SHIMPCAP}"
