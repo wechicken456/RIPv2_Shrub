@@ -51,7 +51,7 @@ int ip_string_to_uint(char *ip_str, uint32_t *out_ipv4_addr) {
     if (inet_pton(AF_INET, ip_str, &(sa.sin_addr)) != 1) {  // 1 is for success
         return -1;
     }
-    *out_ipv4_addr = ntohl(sa.sin_addr.s_addr);
+    *out_ipv4_addr = sa.sin_addr.s_addr;
     return 0;
 }
 // extract X.X.X.Y and X.X.X.0_24 from X.X.X.Y_24. 

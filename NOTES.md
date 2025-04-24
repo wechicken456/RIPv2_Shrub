@@ -11,6 +11,8 @@ cd ..
 
 The most confusing part so far.
 
+Note that throughout the flow of the program, IPv4 addresses are passed across functions in NETWORK byte order. It is up to each individual function to convert it to host byte order if it needs to. It's just a matter of convenience since we don't really change IP addresses in a packet (we mostly just swap the src and dst).
+
 Pcap FILE header and Pcap PACKET header are in sender's machine endianness, while all the actual networking fields are in NETWORK byte order (big-endian).
 
 
@@ -73,3 +75,12 @@ For each shrub instance (program), spawn a reading thread for each interface. Th
 => Use mutexes to guard the write_pcap() function.
 
 As per the testing instruction, and the nature of the [shim.py](./shim.py), hardcode the MAC source address for EVERY reply packet to start with `5e:fe`.
+
+## Mutexes
+
+Use [pthread_mutex_lock](https://stackoverflow.com/a/40880980) before any read/write from an interface's file descriptor.
+
+## RIP
+As per the RFC, first, check if a packet is from and to port 520.
+
+Then, check if the IPv4 source is from one of our interfaces. If it is not, ignore it. This can be done by looping through the global `interfaces` accessible by all threads.

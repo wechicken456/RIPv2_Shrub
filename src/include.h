@@ -47,6 +47,7 @@ struct interface {
     // so that the write one can have O_APPEND that will always seek to the EOF to write so we don't overwrite incoming packet
     int pcap_fd_read;
     int pcap_fd_write;
+    pthread_mutex_t mutex;
 };
 
 extern struct interface interfaces[10];

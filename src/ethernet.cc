@@ -67,11 +67,8 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
     switch (orig_eth->h_proto) { 
         case ETHERTYPE_IPV4: // IPv4 
             ret = process_ipv4(in_packet + sizeof(struct eth_hdr), iov_idx + 1);     // Ethernet is only above Pcap header, so hardcode 1
-            if (ret < 0) {
-                fprintf(stderr, "process_ipv4 failed.\n");
-                break;
-            } else if (ret == 0) {
-                if (debug) fprintf(stderr, "process_ipv4 returned with 0.\n");
+            if (ret <= 0) {
+                if (debug) fprintf(stderr, "process_ipv4 returned with code %d\n", ret);
                 return ret;
             }
 

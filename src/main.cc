@@ -54,16 +54,21 @@ struct pcap_file_header pfh;
  * Note that iov[i] only contains the HEADER at the i-th layer. The data of the i-th packet are the i+1-th, i+2-th, etc. packets due to encapsulation.
  * iov_cnt is the number of iovecs in the array used to write ONE COMPLETE (all protocols) REPLY packet to the pcap file
  * iov_cnt is incremented each time a new protocol is added to the REPLY packet, and reset to 0 each time a new COMPLETE REPLY packet is written.
+ * 
+ * iov and iov_cnt local to each thread (interface) so that each interface can write its own reply packets to the pcap file without interfering with other threads.
+ * For RIP routing packets, use iov_rip and iov_rip_cnt instead, which serve the same functionaliy, but for RIP packets.
  */
 __thread struct iovec iov[10];
 __thread int iov_cnt = 0;
+__thread struct iovec iov_rip[10];
+__thread int iov_rip_cnt = 0;
 
 /* MAC to IPv4 and IPv6 */
 std::map<uint64_t, uint32_t> arp_cache_v4;
 std::map<uint64_t, uint64_t> arp_cache_v6;
 
-/* write pcap header + `len` bytes from `data` to the packet capture file `pcap_fd` */
-void write_pcap(int pcap_fd) {
+/* write pcap header + all bytes from `_iov` to the packet capture file `pcap_fd_write` at the interface `interface_idx` */
+void write_pcap(int interface_idx, struct iovec *_iov, int _iov_cnt) {
     struct pcap_pkthdr *pcap_hdr = (struct pcap_pkthdr *)malloc(sizeof(struct pcap_pkthdr));
     // write the pcap header
     struct timeval tv;
@@ -75,30 +80,49 @@ void write_pcap(int pcap_fd) {
 
     /* calculate the total length of the PCAP packet */
     long long total_len = 0;
-    for (int i = 1 ; i < iov_cnt; i++) total_len += iov[i].iov_len;
+    for (int i = 1 ; i < _iov_cnt; i++) total_len += _iov[i].iov_len;
 
     pcap_hdr->ts_secs = tv.tv_sec;
     pcap_hdr->ts_usecs = tv.tv_usec;
     pcap_hdr->caplen = total_len;   // length WITHOUT the pcap header
     pcap_hdr->len = total_len;
 
-    iov[0].iov_base = pcap_hdr;
-    iov[0].iov_len = sizeof(struct pcap_pkthdr);
+    _iov[0].iov_base = pcap_hdr;
+    _iov[0].iov_len = sizeof(struct pcap_pkthdr);
     total_len += sizeof(struct pcap_pkthdr);
-
-    ret = writev(pcap_fd, iov, iov_cnt);
+    
+    if (debug > 2) {
+        printf("Thread %i: grabbing lock to write packet to interface ", interface_idx);
+        uint32_t ipv4_addr = interfaces[interface_idx].ipv4_addr;
+        print_addr_4((uint8_t*)&ipv4_addr);
+        puts("");
+    }
+    pthread_mutex_lock(&interfaces[interface_idx].mutex);    
+    ret = writev(interfaces[interface_idx].pcap_fd_write, _iov, _iov_cnt);
+    pthread_mutex_unlock(&interfaces[interface_idx].mutex);    
     if (ret != total_len) { // MUST write all bytes to consider it a success
         perror("writev");
+        fprintf(stderr, "Couldn't responsd to packet from interface ");
+        uint32_t ipv4_addr = interfaces[interface_idx].ipv4_addr;
+        print_addr_4((uint8_t*)&ipv4_addr);
+        puts("");
         return;
+    }
+    
+    if (debug) {
+        printf("[+] Responded %lld bytes to interface ", total_len);
+        uint32_t ipv4_addr = interfaces[interface_idx].ipv4_addr;
+        print_addr_4((uint8_t*)&ipv4_addr);
+        puts("");
     }
 
     /* reset the iov array */
-    for (int i = 0 ; i < iov_cnt; i++) {
-        free(iov[i].iov_base);
-        iov[i].iov_base = NULL;
-        iov[i].iov_len = 0;
+    for (int i = 0 ; i < _iov_cnt; i++) {
+        free(_iov[i].iov_base);
+        _iov[i].iov_base = NULL;
+        _iov[i].iov_len = 0;
     }
-    iov_cnt = 1;
+    _iov_cnt = 1;
 }
 
 /* open .dmp pcap file (2 separate fds for read and write) for the `interface_idx`-th interface and verify its header */
@@ -160,16 +184,24 @@ void* loop(void* _interface_idx) {
     thread_interface_idx = interface_idx;
     unsigned char* in_packet = (unsigned char*)malloc(2 << 20);
     int pcap_fd_read = interfaces[interface_idx].pcap_fd_read;
-    int pcap_fd_write = interfaces[interface_idx].pcap_fd_write;
     int ret;
  
+    if (debug > 1) { 
+        printf("Thread %i spawned for interface ", interface_idx);
+        uint32_t ipv4_addr = interfaces[interface_idx].ipv4_addr;
+        print_addr_4((uint8_t*)&ipv4_addr);
+        puts("");
+    }
     /* now read each packet in the file */
 	while (1) {
 
 		/* read the pcap_packet_header, then print as requested */
         struct pcap_pkthdr pph;
+
+        if (debug > 2) printf("Thread %i: grabbing lock to read packet\n", interface_idx);
+        pthread_mutex_lock(&interfaces[interface_idx].mutex);
         ret = read(pcap_fd_read, &pph, sizeof(pph));
-        
+        pthread_mutex_unlock(&interfaces[interface_idx].mutex);
         if (ret < 0) {
             perror("read");
             pthread_exit(&ret);
@@ -189,7 +221,15 @@ void* loop(void* _interface_idx) {
         }
 
         // now read the actual packet
+        if (debug  > 2) {
+            printf("Thread %i: grabbing lock to read packet from interface ", interface_idx);
+            uint32_t ipv4_addr = interfaces[interface_idx].ipv4_addr;
+            print_addr_4((uint8_t*)&ipv4_addr);
+            puts("");
+        }
+        pthread_mutex_lock(&interfaces[interface_idx].mutex);
         ret = read(pcap_fd_read, in_packet, pph.caplen);        
+        pthread_mutex_unlock(&interfaces[interface_idx].mutex);
         if (ret < 0) {
             perror("read");
             pthread_exit(&ret);
@@ -203,6 +243,7 @@ void* loop(void* _interface_idx) {
         if (debug) {
             puts("[+] Received a packet.");
         }
+
         if (reverseEndian) {
             reverse_assign(&pph.ts_secs, sizeof(pph.ts_secs));
             reverse_assign(&pph.ts_usecs, sizeof(pph.ts_usecs));
@@ -226,14 +267,11 @@ void* loop(void* _interface_idx) {
         iov_cnt = 1;
         if (pfh.linktype == 1) { 
 		    ret = process_ethernet(in_packet, iov_cnt);
-            if (ret < 0) {
-                fprintf(stderr, "process_ethernet failed.\n");
-                break;
-            } else if (ret == 0) {
-                if (debug) fprintf(stderr, "process_ethernet returned with 0.\n"); 
+            if (ret <= 0) {
+                if (debug) fprintf(stderr, "[!] process_ethernet returned code: %d\n", ret);
                 continue;
-            }
-            write_pcap(pcap_fd_write);
+            } 
+            write_pcap(interface_idx, iov, iov_cnt);
         } 
 	}
     pthread_exit(&ret);
@@ -283,10 +321,12 @@ int main(int argc, char *argv[])
 
     if (debug) printf("Total number of interfaces: %d\n\n", num_interfaces);
     pthread_t threads[num_interfaces];
+    int* thread_idx = (int*)malloc(num_interfaces * sizeof(int));
     int ret;
     for (int i = 0 ; i < num_interfaces; i++) {
-        int idx = i;
-        ret = pthread_create(&threads[i], NULL, loop, (void*)&idx);
+        thread_idx[i] = i;
+        printf("thread_idx: %d\n", thread_idx[i]);  
+        ret = pthread_create(&threads[i], NULL, loop, (void*)&thread_idx[i]);
         if (ret < 0) {
             fprintf(stderr, "[!] Failed to create thread for interface %d. ABORTING!!!\n", i);
             exit(1337);

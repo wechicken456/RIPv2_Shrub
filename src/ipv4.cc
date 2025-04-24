@@ -15,10 +15,10 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     unsigned int ipv4_hdr_len = (hdr->version_ihl & 0b1111) << 2;
 
     /* if not meant for us (the interface this thread is responsible for reading from), or it is from us, ignore it */
-    if (interfaces[thread_interface_idx].ipv4_addr != ntohl(*(uint32_t*)&hdr->dst_addr)) {
+    if (interfaces[thread_interface_idx].ipv4_addr != *(uint32_t*)&hdr->dst_addr) {
         if (debug) fprintf(stderr, "[*] Not for us. Ignoring...\n");
         return 0;
-    } else if (interfaces[thread_interface_idx].ipv4_addr == ntohl(*(uint32_t*)&hdr->src_addr)) {
+    } else if (interfaces[thread_interface_idx].ipv4_addr == *(uint32_t*)&hdr->src_addr) {
         if (debug) fprintf(stderr, "[*] Packet is from us. Ignoring...\n");
         return 0;
     }
@@ -70,7 +70,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
         case IPV4_TYPE_UDP:
             printf("(UDP)\n");
             ret = process_udp(in_packet + ipv4_hdr_len, (uint16_t*)hdr->src_addr, (uint16_t*)hdr->dst_addr, hdr->total_len - ipv4_hdr_len, iov_idx + 1); 
-            if (ret < 0) {
+            if (ret <= 0) {
                 return ret;
             }
             
@@ -104,7 +104,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
 
             // construct an ICMP packet
             ret = process_icmp(in_packet + ipv4_hdr_len, hdr->total_len - ipv4_hdr_len, iov_idx + 1);
-            if (ret < 0) {  
+            if (ret <= 0) {  
                 return ret;
             }
 

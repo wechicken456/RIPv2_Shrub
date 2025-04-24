@@ -1,10 +1,11 @@
 #include "udp.h"
+#include "rip.h"
 
 void print_udp(struct udp_hdr *udp_datagram) {
-    printf("\tUDP:\tSport:\t%u\n", *(uint16_t*)&udp_datagram->src_port);
-    printf("\t\tDport:\t%u\n", *(uint16_t*)&udp_datagram->dst_port);
-    printf("\t\tDGlen:\t%u\n", *(uint16_t*)&udp_datagram->len);
-    printf("\t\tCSum:\t%u\n", *(uint16_t*)&udp_datagram->cksum);
+    printf("\tUDP:\tSport:\t%u\n", ntohs(udp_datagram->src_port));
+    printf("\t\tDport:\t%u\n", ntohs(udp_datagram->dst_port));
+    printf("\t\tDGlen:\t%u\n", ntohs(udp_datagram->len));
+    printf("\t\tCSum:\t%u\n", ntohs(udp_datagram->cksum));
 }
 
 /* get time since 00:00 Jan 1, 1900 */
@@ -55,8 +56,13 @@ uint16_t udp_cksum(unsigned short *udp_datagram, uint16_t *ip_src, uint16_t *ip_
 }
 
 /*
+ * In the case of ICMP:
  * write the reply packet to iov[iov_idx]
- * where iov_idx (defined in `main.c`, included in `include.h`) i37s the index of the iov array to which the REPLY ICMP packet will be written. 
+ * where iov_idx (defined in `main.cc`, included in `include.h`) is the index of the iov array to which the REPLY ICMP packet will be written. 
+ * In the case of RIP: 
+ * write only the UDP header to iov[iov_idx], the data portion (the RIP packet) will be at iov[iov_idx + 1]
+ * 
+ * The IPv4 src_addr is passed as a pointer to the IPv4 address in network byte order so it's convenient calculate the UDP checksum.
  */
 int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_addr, uint16_t udp_len, int iov_idx) {
     if (debug) {
@@ -78,7 +84,7 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
      }    
     
     struct udp_hdr *hdr = (struct udp_hdr *)udp_datagram;
-
+    int ret = -1;
     switch (ntohs(hdr->dst_port)) {
         case UDP_PORT_ECHO: // echo
         {
@@ -113,12 +119,20 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             iov_cnt++;
             return reply_len;
         }
+
+        case 520: // RIP
+        {
+            ret = process_rip(udp_datagram + sizeof(struct udp_hdr), *(uint32_t *)src_addr, udp_len - sizeof(struct udp_hdr), iov_idx + 1);
+            if (ret <= 0) {
+                return ret;
+            }
+        }
            
         default:
             fprintf(stderr, "[!] Received port %d... Only support UDP echo at this time...\n", ntohs(hdr->dst_port));
             return -1;
     }
-    return -1;
+    return ret;
 }
 
 

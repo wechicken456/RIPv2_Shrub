@@ -10,7 +10,7 @@ struct icmp_hdr {
     uint8_t     code;                /* type sub-code */
     uint16_t     cksum;
     uint16_t     ident;           /* Identifier */
-    uint16_t     seq_num;         /* sequence number */
+    uint16_t     seq_num;         /* sequence number */ 
 };
 
 

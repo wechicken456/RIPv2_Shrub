@@ -1,5 +1,5 @@
 # ignore capture files.
-.vscode
+.vscode/
 *.dmp
 *.pcap
 *.pcapng
