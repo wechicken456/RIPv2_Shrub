@@ -39,17 +39,30 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
         printf("\t\tType:\t0x%x\t", hdr->next_proto_id);
     }
     
-    /* if it is from us, ignore it */
+    /* if the packet is from us, ignore it */
     if (interfaces[thread_interface_idx].ipv4_addr == *(uint32_t*)&hdr->src_addr) {
         if (debug) fprintf(stderr, "[*] Packet is from us. Ignoring...\n");
         return 0;
     }
 
-    /* check if we have a route for it */
+    /* check if we have a route for this packet */
     int found = 0 ;
     pthread_mutex_lock(&rip_cache_mutex);
     for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
-        if (rip_cache_v4[i].ip_dst == *(uint32_t*)&hdr->dst_addr) {
+        uint32_t dst_addr = *(uint32_t*)&hdr->dst_addr;
+
+        /* if it's multicast, send it back to where it came from, which is the interface this thread is responsible for*/
+        if (dst_addr == RIP_MULTICAST_ADDR) { 
+            found = 1;
+            reply_interface_idx = thread_interface_idx; 
+            break;
+        }
+
+        /* find the interface we should write this packet to */
+        if (rip_cache_v4[i].ip_dst == (dst_addr & rip_cache_v4[i].subnet_mask)) {
+            if (rip_cache_v4[i].cost == RIP_COST_INFINITY) {
+                continue;
+            }
             reply_interface_idx = rip_cache_v4[i].iface_idx;
             found = 1;
         }
@@ -79,7 +92,6 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     struct ipv4_hdr *reply_iph = NULL;
     int reply_iph_size;
     int ret; 
-    //int ret;  
     switch (hdr->next_proto_id) {
         case IPV4_TYPE_TCP:
             printf("(TCP)\n");

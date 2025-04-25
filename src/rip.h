@@ -5,27 +5,42 @@
 #include "utils.h"
 #include <vector>
 
+#define RIP_COST_INFINITY 16
+#define RIP_ADDRESS_FAMILY 2
+#define RIP_MULTICAST_ADDR 0xE0000009
+
+
 /* https://datatracker.ietf.org/doc/html/rfc1058#section-3.2 */
 struct rip_hdr {
     uint8_t     command;                /* message type */
     uint8_t     version;                /* type sub-code */
     uint16_t     zero;
-    uint16_t     addr_family;           /* Identifier */
-    uint16_t     zero2;
 };
 
-/* https://datatracker.ietf.org/doc/html/rfc1058#section-3 */
-struct rip_entry {
+/* https://datatracker.ietf.org/doc/html/rfc2453#section-4 */
+struct rip_message_entry {
+    uint16_t addr_family;
+    uint16_t route_tag;
     uint32_t ip_dst;
-    uint32_t cost;
+    uint32_t subnet_mask;
     uint32_t next_hop;
+    uint32_t cost;
+};
+
+struct rip_cache_entry {
+    uint16_t addr_family;
+    uint16_t route_tag;
+    uint32_t ip_dst;
+    uint32_t subnet_mask;
+    uint32_t next_hop;
+    uint32_t cost;
+
     uint32_t flag;
     time_t timer; 
-
-    int iface_idx;  /* the interface responsible for this route */
+    int iface_idx;  /* the interface that we learned this route from */
 };
 
-extern std::vector<struct rip_entry> rip_cache_v4;
+extern std::vector<struct rip_cache_entry> rip_cache_v4;
 extern pthread_mutex_t rip_cache_mutex;
 
 /*

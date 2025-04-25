@@ -14,9 +14,8 @@ uint32_t get_udp_time() {
     return (uint32_t)(now + UNIX_TO_1900_EPOCH_OFFSET);    
 }
 
-uint16_t udp_cksum(unsigned short *udp_datagram, uint16_t *ip_src, uint16_t *ip_dst, uint16_t udp_len) {
-    uint32_t rem = udp_len;
-    const unsigned short *w = udp_datagram;
+uint16_t udp_cksum(uint16_t *udp_header, uint16_t *udp_data, uint16_t *ip_src, uint16_t *ip_dst, uint16_t udp_len) {
+    uint32_t hdr_len = sizeof(struct udp_hdr);
     uint16_t ret;
     uint32_t sum = 0;
     // Add the pseudo-header
@@ -30,17 +29,28 @@ uint16_t udp_cksum(unsigned short *udp_datagram, uint16_t *ip_src, uint16_t *ip_
     sum = (sum >> 16) + (sum & 0xFFFF); // step 2
     
     sum += htons(IPPROTO_UDP);
-    //sum += IPPROTO_UDP;
     sum += htons(udp_len);
 
     sum = (sum >> 16) + (sum & 0xFFFF); // step 2
-    
     while ((sum >> 16) > 0) {
         sum = (sum >> 16) + (sum & 0xFFFF);
     }
 
-    // Now add the UDP datagram
-    while (rem > 1) {
+    // Now add the UDP headerhdr
+    uint16_t *w = udp_header;
+    while (hdr_len > 0) {
+        sum += *w++;
+        hdr_len -= 2;
+    }
+    while ((sum >> 16) > 0) {
+        sum = (sum >> 16) + (sum & 0xFFFF);
+    }
+
+    /* Now add the UDP data */
+    int rem = udp_len - sizeof(struct udp_hdr);
+    w = udp_data;
+
+    while (rem > 0) {
         sum += *w++;
         rem -= 2;
     }
@@ -48,6 +58,10 @@ uint16_t udp_cksum(unsigned short *udp_datagram, uint16_t *ip_src, uint16_t *ip_
     if (rem == 1) { // there might be an odd number of bytes in the UDP datagram
         sum += *w;
     }
+    while ((sum >> 16) > 0) {
+        sum = (sum >> 16) + (sum & 0xFFFF);
+    }
+
 
     sum = (sum >> 16) + (sum & 0xFFFF); // step 2
     sum += (sum >> 16); // step 3
@@ -77,10 +91,10 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
      */
     uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
     ((struct udp_hdr *)udp_datagram)->cksum = 0;
-    uint16_t our_cksum = udp_cksum((unsigned short*)udp_datagram, src_addr, dst_addr, udp_len);
+    uint16_t our_cksum = udp_cksum((uint16_t*)udp_datagram, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
      if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
-         fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
-         return -1;
+        fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
+        return -1;
      }    
     
     struct udp_hdr *hdr = (struct udp_hdr *)udp_datagram;
@@ -92,7 +106,7 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             hdr->len = htons(udp_len);
             hdr->dst_port = hdr->src_port;
             hdr->src_port = htons(UDP_PORT_ECHO);
-            hdr->cksum = udp_cksum((unsigned short*)hdr, src_addr, dst_addr, udp_len);
+            hdr->cksum = udp_cksum((uint16_t*)hdr, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
 
             iov[iov_idx].iov_base = (unsigned char*)malloc(udp_len);
             memcpy(iov[iov_idx].iov_base, udp_datagram, udp_len);   // copy the data in the request, as per the RFC 862
@@ -112,7 +126,7 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             
             uint32_t *data = (uint32_t*)(reply + sizeof(struct udp_hdr));
             *data = htonl(get_udp_time());
-            reply_hdr->cksum = udp_cksum((unsigned short*)reply_hdr, src_addr, dst_addr, reply_len);
+            reply_hdr->cksum = udp_cksum((uint16_t*)reply_hdr, (uint16_t*)(data), src_addr, dst_addr, reply_len);
 
             iov[iov_idx].iov_base = reply;
             iov[iov_idx].iov_len = reply_len;
@@ -120,12 +134,26 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             return reply_len;
         }
 
-        case 520: // RIP
+        case UDP_PORT_RIP: // RIP
         {
             ret = process_rip(udp_datagram + sizeof(struct udp_hdr), *(uint32_t *)src_addr, udp_len - sizeof(struct udp_hdr), iov_idx + 1);
             if (ret <= 0) {
                 return ret;
             }
+            uint16_t reply_len = sizeof(struct udp_hdr) + ret;
+            unsigned char *reply = (unsigned char*)malloc(reply_len); // 4 bytes for the time in the data
+            struct udp_hdr *reply_hdr = (struct udp_hdr *)reply;
+            reply_hdr->cksum = 0;
+            reply_hdr->len = htons(reply_len);
+            reply_hdr->dst_port = hdr->src_port;
+            reply_hdr->src_port = htons(UDP_PORT_RIP);
+            
+            reply_hdr->cksum = udp_cksum((uint16_t*)reply_hdr, (uint16_t*)iov[iov_idx+1].iov_base, src_addr, dst_addr, reply_len);
+
+            iov[iov_idx].iov_base = reply;
+            iov[iov_idx].iov_len = reply_len;
+            iov_cnt++;
+            return reply_len;
         }
            
         default:

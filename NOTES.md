@@ -11,7 +11,7 @@ cd ..
 
 The most confusing part so far.
 
-Note that throughout the flow of the program, IPv4 addresses are passed across functions in NETWORK byte order. It is up to each individual function to convert it to host byte order if it needs to. It's just a matter of convenience since we don't really change IP addresses in a packet (we mostly just swap the src and dst).
+Note that throughout the flow of the program, IPv4 addresses are in NETWORK byte order. It is up to each individual function to convert it to host byte order if it needs to. It's just a matter of convenience since we don't really change IP addresses in a packet (we mostly just swap the src and dst).
 
 Pcap FILE header and Pcap PACKET header are in sender's machine endianness, while all the actual networking fields are in NETWORK byte order (big-endian).
 

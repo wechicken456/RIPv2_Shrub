@@ -26,6 +26,7 @@ fi
 header_hex="$magic_number$major_version$minor_version$time_zone_offset$timestamp_accuracy$snapshot_length$network_link_type"
 
 # Convert hex string to binary and write to file
+touch $1
 echo "$header_hex" | xxd -r -p > "$1"
 
 echo "Pcap header ($endian) written to $1"

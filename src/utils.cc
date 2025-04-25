@@ -14,6 +14,13 @@ void reverse_assign(void *_ptr, int len) {
     }
 }
 
+int is_valid_ipv4_addr(char *ip_str) {
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ip_str, &(sa.sin_addr));
+    return result != 0;
+}
+
+
 // do a reverse DNS look up to get host name from IP address
 void print_hostname(uint8_t *ipv4_addr) {
     struct sockaddr_in *sa = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
@@ -59,11 +66,19 @@ int ip_string_to_uint(char *ip_str, uint32_t *out_ipv4_addr) {
 // Write the extracted IPv4 addr and mask length to the interface struct at interface_idx.
 // return 0 if success, anything otherwise.
 int get_ip_and_filename(char *in_str, char *out_filename, int interface_idx) {
+   
     char *input_copy = strdup(in_str);
     
     char *ip_addr_end = strchr(input_copy, (int)'_');
+    if (ip_addr_end == NULL) {
+        fprintf(stderr, "[!] Invalid interface argument: %s\n", in_str);
+        return -1;
+    }
+
     char *mask_length = ip_addr_end + 1;
     interfaces[interface_idx].mask_length = atoi(mask_length);
+    interfaces[interface_idx].mask_length = interfaces[interface_idx].mask_length > 32 ? 32 : interfaces[interface_idx].mask_length;
+    interfaces[interface_idx].subnet_mask = ((uint32_t)1 << interfaces[interface_idx].mask_length) - 1;
     if (ip_addr_end != NULL) {         
         *ip_addr_end = '\0'; // now input_copy is '_' -truncated
         if (ip_string_to_uint(input_copy, &interfaces[interface_idx].ipv4_addr) != 0) {    // extract host ip address, also check if the provided X.X.X.Y is valid IP string

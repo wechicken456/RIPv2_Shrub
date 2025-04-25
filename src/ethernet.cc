@@ -74,7 +74,7 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
 
             new_eth = (struct eth_hdr *)malloc(sizeof(struct eth_hdr));
             if (!new_eth) {
-                perror("malloc full_frame");
+                perror("ethernet.cc: malloc: ");
                 exit(1);
             }
 
