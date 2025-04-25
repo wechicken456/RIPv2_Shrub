@@ -1,6 +1,8 @@
 #include "ipv4.h"
 #include "tcp.h"
 #include "udp.h"
+#include "rip.h"
+#include "include.h"
 
 /* return an integer indicating the length of the IPv4 packet (including encapsulated packets): -1 for error, 0 if not for us (the interface this thread is responsible for reading from), 
  * or the length of the packet if successful.
@@ -13,28 +15,7 @@
 int process_ipv4(unsigned char *in_packet, int iov_idx) {
     struct ipv4_hdr *hdr = (struct ipv4_hdr *)in_packet;
     unsigned int ipv4_hdr_len = (hdr->version_ihl & 0b1111) << 2;
-
-    /* if not meant for us (the interface this thread is responsible for reading from), or it is from us, ignore it */
-    if (interfaces[thread_interface_idx].ipv4_addr != *(uint32_t*)&hdr->dst_addr) {
-        if (debug) fprintf(stderr, "[*] Not for us. Ignoring...\n");
-        return 0;
-    } else if (interfaces[thread_interface_idx].ipv4_addr == *(uint32_t*)&hdr->src_addr) {
-        if (debug) fprintf(stderr, "[*] Packet is from us. Ignoring...\n");
-        return 0;
-    }
-
-    // verify IPv4 checksum
-    if (verify_cksum(hdr, ipv4_hdr_len)) {   // S + ~S === 0
-        fprintf(stderr, "[!] INVALID IPv4 CHECKSUM.\n");
-        return -1;
-    }
-
-    // convert all the fields to host byte order
-    hdr->hdr_checksum = ntohs(hdr->hdr_checksum);
-    hdr->fragment_offset = ntohs(hdr->fragment_offset);
-    hdr->frame_ident = ntohs(hdr->frame_ident); 
-    hdr->total_len = ntohs(hdr->total_len);
-
+    
     if (debug >= 1) {
         printf("[+] Received an IPv4 packet.\n");
     }
@@ -57,6 +38,43 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
         printf("\t\tIP CSum:\t%u\n", hdr->hdr_checksum);
         printf("\t\tType:\t0x%x\t", hdr->next_proto_id);
     }
+    
+    /* if it is from us, ignore it */
+    if (interfaces[thread_interface_idx].ipv4_addr == *(uint32_t*)&hdr->src_addr) {
+        if (debug) fprintf(stderr, "[*] Packet is from us. Ignoring...\n");
+        return 0;
+    }
+
+    /* check if we have a route for it */
+    int found = 0 ;
+    pthread_mutex_lock(&rip_cache_mutex);
+    for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
+        if (rip_cache_v4[i].ip_dst == *(uint32_t*)&hdr->dst_addr) {
+            reply_interface_idx = rip_cache_v4[i].iface_idx;
+            found = 1;
+        }
+    }
+    pthread_mutex_unlock(&rip_cache_mutex);
+
+    if (!found) {
+        fprintf(stderr, "[!] No route for ");
+        print_addr_4((uint8_t*)&hdr->dst_addr);
+        puts("");
+        return 0;   
+    }
+
+    // verify IPv4 checksum
+    if (verify_cksum(hdr, ipv4_hdr_len)) {   // S + ~S === 0
+        fprintf(stderr, "[!] INVALID IPv4 CHECKSUM.\n");
+        return -1;
+    }
+
+    // convert all the fields to host byte order
+    hdr->hdr_checksum = ntohs(hdr->hdr_checksum);
+    hdr->fragment_offset = ntohs(hdr->fragment_offset);
+    hdr->frame_ident = ntohs(hdr->frame_ident); 
+    hdr->total_len = ntohs(hdr->total_len);
+
     
     struct ipv4_hdr *reply_iph = NULL;
     int reply_iph_size;
@@ -88,9 +106,10 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             reply_iph->fragment_offset = 0;                                       
             reply_iph->time_to_live = 64;                                               // random TTL 
             reply_iph->next_proto_id = IPPROTO_UDP;                                    // UDP 
-            memcpy(&reply_iph->src_addr, hdr->dst_addr, 4);                          // Swap src and dst addresses
-            memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
-            
+            if (is_reply_packet) {  /* only swap the src and dst addresses if we're replying back to the host */
+                memcpy(&reply_iph->src_addr, hdr->dst_addr, 4);                          // Swap src and dst addresses
+                memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
+            }
             // checksum is computed over ONLY the header as per RFC 791
             reply_iph->hdr_checksum = in_cksum((unsigned short *)reply_iph, sizeof(*reply_iph), 0);
             

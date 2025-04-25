@@ -70,9 +70,13 @@ The data received in the echo message must be returned in the echo reply message
 
 # Shrub dev notes
 
+
 For each shrub instance (program), spawn a reading thread for each interface. This thread will read packets from that interface and write reply packets - which can go to other interfaces. 
 
 => Use mutexes to guard the write_pcap() function.
+
+**Shared memory** among threads:The RIP table (`rip_cache_v4`), and the `interfaces` array.
+**Thread Local Storage**: the `iov`s.
 
 As per the testing instruction, and the nature of the [shim.py](./shim.py), hardcode the MAC source address for EVERY reply packet to start with `5e:fe`.
 

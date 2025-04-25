@@ -124,3 +124,4 @@ unsigned short in_cksum(const unsigned short *addr, int len, unsigned short csum
 int verify_cksum(void *data, int len) {
     return in_cksum((const unsigned short *)data, len, 0) == 0xFFFF;
 }
+

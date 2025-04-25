@@ -17,6 +17,10 @@
 #include <stdio.h>
 #include <sys/uio.h>
 #include <time.h>
+#include <pthread.h>
+#include <sys/stat.h>
+
+#define pb push_back
 
 #define PCAP_MAGIC_LITTLE         0xa1b2c3d4
 #define PCAP_MAGIC_BIG            0xd4c3b2a1
@@ -31,7 +35,10 @@
 #define ICMP_TYPE_ECHO_REPLY 0x0
 #define UDP_PORT_ECHO 7
 #define UDP_PORT_TIME 37
+#define UDP_PORT_RIP 520
 #define UNIX_TO_1900_EPOCH_OFFSET 2208988800UL
+#define MAX_NUM_INTERFACES 100
+#define RIP_COST_INFINITY 16
 
 typedef int32_t bpf_int32;
 typedef u_int32_t bpf_u_int32;
@@ -41,7 +48,7 @@ struct interface {
     uint32_t ipv4_addr; 
     uint32_t mask_length;
     uint32_t ipv6_addr;
-    uint64_t mac_addr;
+    uint8_t mac_addr[6];
     int mtu;
     // since we're reading & writing to the same file, we need 2 different FDs 
     // so that the write one can have O_APPEND that will always seek to the EOF to write so we don't overwrite incoming packet
@@ -50,9 +57,11 @@ struct interface {
     pthread_mutex_t mutex;
 };
 
-extern struct interface interfaces[10];
+extern struct interface interfaces[];
 extern int num_interfaces;
 extern __thread int thread_interface_idx; 
+extern __thread int reply_interface_idx;
+extern __thread int is_reply_packet;
 
 extern char tcp_flag_string[]; 
 extern uint32_t my_ipv4_addr;
@@ -70,4 +79,7 @@ extern int reverseEndian;
 extern __thread struct iovec iov[];
 extern __thread int iov_cnt;
 
+extern int SLEEP_TIME_RIP;
+// extern __thread struct iovec iov_rip[];
+// extern __thread int iov_rip_cnt;
 #endif

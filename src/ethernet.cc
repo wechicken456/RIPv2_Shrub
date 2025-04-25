@@ -80,9 +80,7 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
 
             /* Hardcode source addresss's first 2 bytes to 5e:fe as per the testing instructions and how the shim.py works */
             memcpy(new_eth->h_dest, orig_eth->h_source, 6);
-            new_eth->h_source[0] = 0x5e;
-            new_eth->h_source[1] = 0xfe;
-            memcpy(new_eth->h_source + 2, &interfaces[thread_interface_idx].ipv4_addr, 4);    
+            memcpy(new_eth->h_source, interfaces[thread_interface_idx].mac_addr, 6);    
             new_eth->h_proto = htons(ETHERTYPE_IPV4);    
 
             iov[iov_idx].iov_base = new_eth;
