@@ -4,7 +4,8 @@
 #include "rip.h"
 #include "include.h"
 
-/* return an integer indicating the length of the IPv4 packet (including encapsulated packets): -1 for error, 0 if not for us (the interface this thread is responsible for reading from), 
+/* return an integer indicating the logical (if all the encapsulated packets were contiguous)
+ * length of the IPv4 packet (including encapsulated packets): <0 for error, 0 if not for us (the interface this thread is responsible for reading from), 
  * or the length of the packet if successful.
  * Note that this function only allocates the IPv4 header, and not the encapsulated packets. The rest of the packet lives in the iov array.
  * So this return value doesn't indicate the BUFFER size (iov_len) of the IPv4 header at iov[iov_idx], but the logical size of the entire packet, if it was contiguous.
@@ -45,16 +46,29 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
         return 0;
     }
 
+    if (interfaces[thread_interface_idx].ipv4_addr == *(uint32_t*)&hdr->dst_addr
+        || *(uint32_t*)&hdr->dst_addr == RIP_MULTICAST_ADDR
+        || *(uint32_t*)&hdr->dst_addr == 0xFFFFFFFF) {
+        is_for_us = 1;
+    } else {
+        is_for_us = 0;
+    }
+
+
     /* check if we have a route for this packet */
     int found = 0 ;
     pthread_mutex_lock(&rip_cache_mutex);
     for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
         uint32_t dst_addr = *(uint32_t*)&hdr->dst_addr;
 
-        /* if it's multicast, send it back to where it came from, which is the interface this thread is responsible for*/
+        if ( i == default_route_idx) continue;
+
+        /* if it's multicast, we don't have to reply. But if we do, 
+         * send it back to where it came from, which is the interface this thread is responsible for
+         */
         if (dst_addr == RIP_MULTICAST_ADDR) { 
             found = 1;
-            reply_interface_idx = thread_interface_idx; 
+            outgoing_interface_idx = thread_interface_idx; 
             break;
         }
 
@@ -63,9 +77,14 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             if (rip_cache_v4[i].cost == RIP_COST_INFINITY) {
                 continue;
             }
-            reply_interface_idx = rip_cache_v4[i].iface_idx;
+            outgoing_interface_idx = rip_cache_v4[i].iface_idx;
             found = 1;
         }
+    }
+    if (default_route_idx != -1 && !found) {
+        /* if we don't have a route for this packet, but we have a default route, use it */
+        outgoing_interface_idx = default_route_idx;
+        found = 1;
     }
     pthread_mutex_unlock(&rip_cache_mutex);
 
@@ -88,6 +107,19 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     hdr->frame_ident = ntohs(hdr->frame_ident); 
     hdr->total_len = ntohs(hdr->total_len);
 
+    if (!is_for_us) {
+        /* we have to create a new packet and copy from it instead of using the original one 
+         * because the original packet is a global buffer to read from pcap,
+         * while write_pcap will free the buffers in the iov array. So we can't free the global buffer.
+         */
+        fprintf(stderr, "[!] Packet is not for us, but we have a route for it. Forwarding...\n");
+        unsigned char *ipv4_reply = (unsigned char*)malloc(hdr->total_len);
+        memcpy(ipv4_reply, in_packet, hdr->total_len);
+        iov[iov_idx].iov_base = ipv4_reply;
+        iov[iov_idx].iov_len = hdr->total_len;
+        iov_cnt++;
+        return hdr->total_len;
+    }
     
     struct ipv4_hdr *reply_iph = NULL;
     int reply_iph_size;
@@ -118,9 +150,14 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             reply_iph->fragment_offset = 0;                                       
             reply_iph->time_to_live = 64;                                               // random TTL 
             reply_iph->next_proto_id = IPPROTO_UDP;                                    // UDP 
-            if (is_reply_packet) {  /* only swap the src and dst addresses if we're replying back to the host */
-                memcpy(&reply_iph->src_addr, hdr->dst_addr, 4);                          // Swap src and dst addresses
+
+             /* only change the src and dst addresses if we're replying back to the host. Otherwise copy the same addresses and forward the packet */
+            if (is_for_us) {  
+                memcpy(&reply_iph->src_addr, &interfaces[thread_interface_idx].ipv4_addr, 4); 
                 memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
+            } else {
+                memcpy(&reply_iph->src_addr, hdr->src_addr, 4);
+                memcpy(&reply_iph->dst_addr, hdr->dst_addr, 4);
             }
             // checksum is computed over ONLY the header as per RFC 791
             reply_iph->hdr_checksum = in_cksum((unsigned short *)reply_iph, sizeof(*reply_iph), 0);
@@ -153,9 +190,16 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             reply_iph->fragment_offset = 0;                                       
             reply_iph->time_to_live = 64;                                               // random TTL 
             reply_iph->next_proto_id = IPPROTO_ICMP;                                    // ICMP 
-            memcpy(&reply_iph->src_addr, hdr->dst_addr, 4);                          // Swap src and dst addresses
-            memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
             
+            /* only change the src and dst addresses if we're replying back to the host */
+             if (is_for_us) {  
+                memcpy(&reply_iph->src_addr, &interfaces[thread_interface_idx].ipv4_addr, 4); 
+                memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
+            } else {
+                memcpy(&reply_iph->src_addr, hdr->src_addr, 4);
+                memcpy(&reply_iph->dst_addr, hdr->dst_addr, 4);
+            }
+
             // checksum is computed over ONLY the header as per RFC 791
             reply_iph->hdr_checksum = in_cksum((unsigned short *)reply_iph, sizeof(*reply_iph), 0);
             

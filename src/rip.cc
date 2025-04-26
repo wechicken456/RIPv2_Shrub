@@ -5,14 +5,32 @@
 
 
 /* print RIP header */
-void print_rip(struct rip_hdr *hdr) {
-    printf("\tRIP:\tCommand:\t%s\n", (hdr->command == 1) ? "Request" : "Reply");
-    printf("\t\tVersion:\t%u\n", hdr->version);
-    printf("\t\tZero:\t%u\n", ntohs(hdr->zero));
+void print_rip(unsigned char *pkt, int pkt_len) {
+    struct rip_hdr *hdr = (struct rip_hdr *)pkt;
+    printf("\tRIP:\tCommand:\t\t%s\n", (hdr->command == 1) ? "Request" : "Reply");
+    printf("\t\tVersion:\t\t%u\n", hdr->version);
+    printf("\t\tZero:\t\t%u\n", ntohs(hdr->zero));
+    int num_entries = (pkt_len - sizeof(struct rip_hdr)) / sizeof(struct rip_message_entry);
+    for (int i= 0 ; i < num_entries; i++){
+        struct rip_message_entry *entry = (struct rip_message_entry *)(pkt + sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * i);
+        printf("\t\tEntry %d:\n", i);
+        printf("\t\t- Address family:\t%u\n", ntohs(entry->addr_family));
+        printf("\t\t- Route tag:\t%u\n", ntohs(entry->route_tag));
+        printf("\t\t- IP dst:\t");
+        print_addr_4((uint8_t*)&entry->ip_dst);
+        puts("");
+        printf("\t\t- Subnet mask:\t");
+        print_addr_4((uint8_t*)&entry->subnet_mask);
+        puts("");
+        printf("\t\t- Next hop:\t");
+        print_addr_4((uint8_t*)&entry->next_hop);
+        puts("");
+        printf("\t\t- Cost:\t%u\n", ntohs(entry->cost));
+    }
 }
 
-int split_horizon_poisoned_reverse(int cost, int cache_interface_idx, int outgoing_interface_idx) {
-    if (cache_interface_idx == outgoing_interface_idx) return RIP_COST_INFINITY;
+uint32_t split_horizon_poisoned_reverse(uint32_t cost, uint32_t adverstiser, uint32_t ipv4_src_addr) {
+    if (adverstiser == ipv4_src_addr) return RIP_COST_INFINITY;
     return cost;
 }
 /* create a rip broadcast with the entries from rip_vcache_v4
@@ -20,9 +38,14 @@ int split_horizon_poisoned_reverse(int cost, int cache_interface_idx, int outgoi
  * This is because it creates a whole reply packets (ether, ipv4, udp, rip) into a single iov,
  * which is different from how reply packets are created (check `iov` in `main.cc`).
  */
-int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int interface_idx) {
+int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int interface_idx, int request_all_routes) {
     /* RIP packet */
-    int rip_pkt_len = sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * rip_cache_v4.size();
+    int rip_pkt_len;
+    if (request_all_routes) rip_pkt_len = sizeof(struct rip_hdr) + sizeof(struct rip_message_entry);
+    else {
+        rip_pkt_len = sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * rip_cache_v4.size();
+        if (default_route_idx != -1) rip_pkt_len -= sizeof(struct rip_message_entry);    // don't advertise our default route
+    }
     int total_pkt_len = rip_pkt_len + sizeof(struct udp_hdr) + sizeof(struct ipv4_hdr) + sizeof(struct eth_hdr);
     unsigned char *pkt = (unsigned char*)malloc(total_pkt_len);
     if (!pkt) {
@@ -37,17 +60,34 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
         return -1;
     }
     rip_hdr->command = 1;    // RIP request
-    rip_hdr->version = 2;    // RIP v2
-    for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
-        struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr) + 
-                                                                        sizeof(rip_message_entry) * i);
-        
+    rip_hdr->version = 2;    // addrRIP v2
+    rip_hdr->zero = 0;
+
+    if (request_all_routes) {
+        struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr));
         entry->addr_family = htons(RIP_ADDRESS_FAMILY);    // IPv4
         entry->route_tag = 0;    // no route tag
-        entry->ip_dst = rip_cache_v4[i].ip_dst;
-        entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
-        entry->next_hop = rip_cache_v4[i].next_hop;
-        entry->cost = htons(rip_cache_v4[i].cost);
+        entry->ip_dst = 0;
+        entry->subnet_mask = 0;
+        entry->next_hop = 0;
+        entry->cost = htons(RIP_COST_INFINITY);
+    } else {
+        pthread_mutex_lock(&rip_cache_mutex);
+        for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
+            /* either a deleted entry, OR it is our default route, which we shouldn't advertise */
+            if (rip_cache_v4[i].ip_dst == 0) continue;
+
+            struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr) + 
+                                                                            sizeof(rip_message_entry) * i);
+            
+            entry->addr_family = htons(RIP_ADDRESS_FAMILY);    // IPv4
+            entry->route_tag = 0;    // no route tag
+            entry->ip_dst = rip_cache_v4[i].ip_dst;
+            entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
+            entry->next_hop = rip_cache_v4[i].next_hop;
+            entry->cost = htons(rip_cache_v4[i].cost);
+        }
+        pthread_mutex_unlock(&rip_cache_mutex);
     }
 
     /* UDP header */
@@ -73,9 +113,9 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
     _ipv4_hdr->total_len = htons(total_pkt_len - sizeof(struct eth_hdr));   // Total length = IPv4 header + UDP datagram + RIP packet
     _ipv4_hdr->time_to_live = 1;                                            // TTL = 1 for RIP broadcasts as we only have to send to neighbors                                 
     _ipv4_hdr->next_proto_id = IPPROTO_UDP;                                 // UDP 
-    memcpy(&_ipv4_hdr->src_addr, (uint8_t*)&ipv4_src_addr, 4);              // source IPv4 address
-    memcpy(&_ipv4_hdr->dst_addr, (uint8_t*)&ipv4_dst_addr, 4);              // destination IPv4 address
-    _ipv4_hdr->frame_ident = htons(0x0001);                                 // ID can be whatever
+    memcpy(&_ipv4_hdr->src_addr, &interfaces[interface_idx].ipv4_addr, 4); 
+    memcpy(&_ipv4_hdr->dst_addr, (uint8_t*)&ipv4_dst_addr, 4);              
+    _ipv4_hdr->frame_ident = htons(0x2222);                                 // ID can be whatever
     _ipv4_hdr->fragment_offset = 0;                                         // no fragmentation
     _ipv4_hdr->hdr_checksum = 0;                                            // checksum is set to 0 before calculating it
     // checksum is cinterface_idxomputed over ONLY the header as per RFC 791
@@ -98,43 +138,12 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
     return total_pkt_len;
 }
 
-/*
- * different from `create_rip_broadcast_pkt` in that it only creates the RIP packet portion,
- * not the entire network packet to be sent.
- * This also creates a response/reply packet (command = 2) instead of request.
- * Use split hroizon poison reverse: set the cost of the an outgoing entry to RIP_COST_INFINITY  
- * if the interface that advertised this route to us is the same interface that we're sending the packet to.
- * See RFC: https://datatracker.ietf.org/doc/html/rfc2453#section-3.4.3
- */
-int create_rip_broadcast_msg(int interface_idx, int iov_idx) {
-    int pkt_len = sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * rip_cache_v4.size();
-    unsigned char *rip_pkt = (unsigned char*)malloc(pkt_len);
-    if (!rip_pkt) {
-        perror("create_rip_broadcast: ");
-        return -1;
-    }
-    struct rip_hdr *hdr = (struct rip_hdr *)rip_pkt;
-    hdr->command = 2;    // RIP reply
-    hdr->version = 2;    // RIP v2
-    hdr->zero = 0;
-    for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
-        struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr) + 
-                                                                        sizeof(rip_message_entry) * i);
-        
-        entry->addr_family = htons(RIP_ADDRESS_FAMILY);    // IPv4
-        entry->route_tag = 0;    // no route tag
-        entry->ip_dst = rip_cache_v4[i].ip_dst;
-        entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
-        entry->next_hop = rip_cache_v4[i].next_hop;
-        entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].iface_idx, interface_idx));
-    }
-    iov[iov_idx].iov_base = rip_pkt;
-    iov[iov_idx].iov_len = pkt_len;
-    iov_cnt++;
-    return pkt_len;
-}
-void* rip_broadcast(void* _interface_idx) {
+void* loop_rip_broadcast(void* _interface_idx) {
     int interface_idx = *(int*)_interface_idx;
+    if (default_route_idx != -1 && interface_idx == default_route_idx) {
+        fprintf(stderr, "[!] RIP broadcast thread for interface %d is the default route. ABORTING!!!\n", interface_idx);
+        pthread_exit(NULL);
+    }
     int ret;
     uint32_t ipv4_src_addr = interfaces[interface_idx].ipv4_addr;
     unsigned char *mac_addr = interfaces[interface_idx].mac_addr;
@@ -146,9 +155,30 @@ void* rip_broadcast(void* _interface_idx) {
         printf("with SLEEP_TIME_RIP = %d\n", SLEEP_TIME_RIP);
         puts("");
     }
+
+    /* when we first go online, broadcast a request for the whole routing table from each host*/
+    int pkt_len = create_rip_broadcast_pkt(mac_addr, ipv4_src_addr, interface_idx, 1);
+    if (pkt_len <= 0) {
+        fprintf(stderr, "[!] Failed to create RIP broadcast packet for interface %d...!!!\n", interface_idx);
+        pthread_exit(&pkt_len);
+    } else { 
+        ret = write_pcap(interface_idx); 
+        if (ret < 0) {
+            fprintf(stderr, "[!] Failed to write RIP broadcast packet for interface %d...!!!\n", interface_idx);
+            pthread_exit(&ret);
+        } else {
+            if (debug) {
+                printf("[+] RIP broadcast thread: Wrote RIP broadcast packet of length %d to interface %d - ", pkt_len, interface_idx);
+                print_addr_4((uint8_t*)&interfaces[interface_idx].ipv4_addr);
+                puts("");
+            }
+        }
+    }
+
     while (1) {
+        sleep(SLEEP_TIME_RIP);
         if (debug) printf("RIP broadcast thread %d: broadcasting RIP request to all neighbors...\n", interface_idx);
-        int pkt_len = create_rip_broadcast_pkt(mac_addr, ipv4_src_addr, interface_idx);
+        int pkt_len = create_rip_broadcast_pkt(mac_addr, ipv4_src_addr, interface_idx, 0);
         if (pkt_len <= 0) {
             fprintf(stderr, "[!] Failed to create RIP broadcast packet for interface %d...!!!\n", interface_idx);
             continue;
@@ -164,7 +194,7 @@ void* rip_broadcast(void* _interface_idx) {
                 puts("");
             }
         }
-        sleep(SLEEP_TIME_RIP);
+        
     }
 }
 
@@ -175,13 +205,13 @@ void* rip_broadcast(void* _interface_idx) {
  * For each interface, it will spawn a thread for rip_broadcast(interface_idx), which will
  * broadcast RIP requests every 30s to that particular interface.
  */
-void loop_rip() {
+void create_rip_threads() {
     pthread_t *rip_thread = (pthread_t*)malloc(sizeof(pthread_t) * num_interfaces);
     int *rip_thread_idx = (int*)malloc(sizeof(int) * num_interfaces);
     int ret;
     for (int i = 0 ; i < num_interfaces; i++) {
         rip_thread_idx[i] = i;
-        ret = pthread_create(rip_thread + i, NULL, &rip_broadcast, (void*)&rip_thread_idx[i]);
+        ret = pthread_create(rip_thread + i, NULL, &loop_rip_broadcast, (void*)&rip_thread_idx[i]);
         if (ret < 0) {
             fprintf(stderr, "[!] Failed to create RIP broadcast thread for interface %d...!!!\n", i);
             continue;
@@ -198,12 +228,53 @@ void loop_rip() {
     }
 }
 
+
+/*
+ * different from `create_rip_broadcast_pkt` in that it only creates the RIP packet portion,
+ * not the entire network packet to be sent.
+ * This also creates a response/reply packet (command = 2) instead of request.
+ * Use split hroizon poison reverse: set the cost of the an outgoing entry to RIP_COST_INFINITY  
+ * if the interface that advertised this route to us is the same interface that we're sending the packet to.
+ * See RFC: https://datatracker.ietf.org/doc/html/rfc2453#section-3.4.3
+ * 
+ * Write the address of the RIP packet to the the `dst` pointer and return the length of the packet.
+ */
+int create_rip_broadcast_msg(unsigned char **dst, uint32_t ipv4_src_addr) {
+    int pkt_len = sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * rip_cache_v4.size();
+    if (default_route_idx != -1) pkt_len -= sizeof(struct rip_message_entry);    // don't advertise our default route
+    unsigned char *rip_pkt = (unsigned char*)malloc(pkt_len);
+    if (!rip_pkt) {
+        perror("create_rip_broadcast: ");
+        return -1;
+    }
+    struct rip_hdr *hdr = (struct rip_hdr *)rip_pkt;
+    hdr->command = 2;    // RIP reply
+    hdr->version = 2;    // RIP v2
+    hdr->zero = 0;
+    for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
+        /* either a deleted entry, OR it is our default route, which we shouldn't advertise */
+        if (rip_cache_v4[i].ip_dst == 0) continue;
+        struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr) + 
+                                                                        sizeof(rip_message_entry) * i);
+        
+        entry->addr_family = htons(RIP_ADDRESS_FAMILY);    // IPv4
+        entry->route_tag = 0;    // no route tag
+        entry->ip_dst = rip_cache_v4[i].ip_dst;
+        entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
+        entry->next_hop = rip_cache_v4[i].next_hop;
+        entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].next_hop, ipv4_src_addr));
+    }
+    *dst = rip_pkt;
+    return pkt_len;
+}
+
 /*
  * Process an incoming (received) RIP packet and write the RIP reply packet to iov[iov_idx].
  * 
  */
-int process_rip(unsigned char *rip_packet, uint32_t ipv4_src_addr, int pkt_len, int iov_idx) {
-    struct rip_hdr *hdr = (struct rip_hdr *)rip_packet;
+int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int pkt_len, int iov_idx) {
+    struct rip_hdr *hdr = (struct rip_hdr *)incoming_rip_packet;
+    if (debug) print_rip(incoming_rip_packet, pkt_len);
 
     if (hdr->version != 2) {
         fprintf(stderr, "[!] INVALID RIP VERSION: %d\n", hdr->version);
@@ -232,45 +303,71 @@ int process_rip(unsigned char *rip_packet, uint32_t ipv4_src_addr, int pkt_len, 
         fprintf(stderr, "[!] RIP packet is not from one of our interfaces. Ignoring...\n");
         return 0;
     }
-
     if (hdr->command == 1) {    // RIP request
-        if (debug) print_rip(hdr);
     
         /* construct a RIP reply packet by replacing the cost of each entry with the one in our RIP table
          * see RFC: https://datatracker.ietf.org/doc/html/rfc2453#section-3.9.1
          */
-        hdr->command = 2;   /*  we can reuse this packet */
-
+        unsigned char *reply_rip_pkt = (unsigned char*)malloc(pkt_len);
+        if (!reply_rip_pkt) {
+            perror("process_rip: malloc:");
+            return -1;
+        }
+        memcpy(reply_rip_pkt, incoming_rip_packet, pkt_len); /* we can reuse most info from the input packet */
+        hdr = (struct rip_hdr *)reply_rip_pkt;
+        hdr->command = 2;   /* RIP repy */
         int num_entries = (pkt_len - sizeof(struct rip_hdr)) / sizeof(struct rip_message_entry);
         if (num_entries == 0) return -1;
 
+        /* `ret` is the length of the rip packet at iov[iov_idx]
+         * since it could a broadcast respose, instead of a 1-to-1 mapping,
+         * it might have different length from the request.  */
+        int ret = pkt_len;
         for (int i = 0 ; i < num_entries; i++) {
-            struct rip_message_entry *rip_entry = (struct rip_message_entry*)(rip_packet + sizeof(struct rip_hdr) 
+            struct rip_message_entry *request_rip_entry = (struct rip_message_entry*)(incoming_rip_packet + sizeof(struct rip_hdr) 
                                                                             + sizeof(struct rip_message_entry) * i);
-            uint32_t entry_ip_dst = rip_entry->ip_dst;
+            struct rip_message_entry *reply_rip_entry = (struct rip_message_entry*)(reply_rip_pkt + sizeof(struct rip_hdr) 
+                                                                            + sizeof(struct rip_message_entry) * i);
+            uint32_t request_entry_ip_dst = request_rip_entry->ip_dst;
             // uint32_t entry_subnet_mask = (rip_entry->subnet_mask == 0) ? 0xFFFFFFFF : rip_entry->subnet_mask;
-            if (entry_ip_dst == 0 && num_entries == 1) { /* special case, asking for the entire routing table */
-                return create_rip_broadcast_msg(from_interface_idx, iov_idx);
+            /* special case, asking for the entire routing table */
+            if (request_entry_ip_dst == 0 && num_entries == 1) { 
+                if (debug) {
+                    printf("[*] Received RIP request for entire routing table from interface %d - \n", from_interface_idx);
+                    print_addr_4((uint8_t*)&interfaces[from_interface_idx].ipv4_addr);
+                    puts("");
+                }
+                /* `create_rip_broadcast_msg` will create a packet. so free this one */
+                free(reply_rip_pkt);
+                /* since it's a broadcast respose, it will have different length from the request */
+                ret = create_rip_broadcast_msg(&reply_rip_pkt, ipv4_src_addr);
+                if (ret <= 0) {
+                    fprintf(stderr, "[!] Failed to create RIP reply packet for interface %d...!!!\n", from_interface_idx);
+                    return ret;
+                }
+                break;
             }
             
-            rip_entry->cost = RIP_COST_INFINITY;    // default cost is infinity
+            reply_rip_entry->cost = RIP_COST_INFINITY;    // default cost is infinity
             for (int j = 0 ; j < (int)rip_cache_v4.size(); j++) {
-                if ((rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask) == (entry_ip_dst & rip_cache_v4[j].subnet_mask)) {
-                    rip_entry->cost = split_horizon_poisoned_reverse((rip_cache_v4[j].cost), rip_cache_v4[j].iface_idx, from_interface_idx);
+                if ((rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask) == (request_entry_ip_dst & rip_cache_v4[j].subnet_mask)) {
+                    reply_rip_entry->cost = split_horizon_poisoned_reverse((rip_cache_v4[j].cost), rip_cache_v4[j].next_hop, ipv4_src_addr);
                     break;
                 }
             }
-            rip_entry->cost = htonl(rip_entry->cost);
+            reply_rip_entry->cost = htonl(reply_rip_entry->cost);
         }
 
-        iov[iov_idx].iov_base = rip_packet;
-        iov[iov_idx].iov_len = pkt_len;
+        if (debug > 2) {
+            printf("[+] Created RIP reply packet: \n");
+            if (debug > 1) print_rip(reply_rip_pkt, ret);
+        }
+        iov[iov_idx].iov_base = reply_rip_pkt;
+        iov[iov_idx].iov_len = ret;
         iov_cnt++;
-        return pkt_len;
+        return ret;
 
     } else if (hdr->command == 2) {     // RIP Response/Reply
-        if (debug) print_rip(hdr);
-
         
     }
 

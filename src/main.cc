@@ -40,16 +40,17 @@ struct pcap_pkthdr {
 struct interface interfaces[MAX_NUM_INTERFACES];
 int num_interfaces = 0;
 __thread int thread_interface_idx;
-__thread int reply_interface_idx;
-__thread int is_reply_packet = 0; /* if it is 1, we don't swap the src & dst addresses */
+__thread int outgoing_interface_idx;
 
+/* 1 if dest ip addr is for us, so we need to change the src & dst addresses. Otherwise just forward it */
+__thread int is_for_us = 0; 
 
 std::vector<struct rip_cache_entry> rip_cache_v4;
 pthread_mutex_t rip_cache_mutex;
 char tcp_flag_string[] = "FSRPAU"; 
 
 int debug = 0;
-int resolveDNS = 1;
+int resolveDNS = 0;
 int reverseEndian = 0;
 int SLEEP_TIME_RIP = 30; // seconds
 int default_route_idx = -1;
@@ -77,6 +78,7 @@ std::map<uint64_t, uint64_t> arp_cache_v6;
 /* write pcap header + all bytes from `iov` to the packet capture file `pcap_fd_write` at the interface `interface_idx` */
 int write_pcap(int interface_idx) {
     struct pcap_pkthdr *pcap_hdr = (struct pcap_pkthdr *)malloc(sizeof(struct pcap_pkthdr));
+
     // write the pcap header
     struct timeval tv;
     long long ret = gettimeofday(&tv, NULL);
@@ -98,7 +100,7 @@ int write_pcap(int interface_idx) {
     iov[0].iov_len = sizeof(struct pcap_pkthdr);
     total_len += sizeof(struct pcap_pkthdr);
     
-    if (debug > 2) {
+    if (debug > 1) {
         printf("Thread %i: grabbing lock to write packet to interface ", thread_interface_idx);
         uint32_t ipv4_addr = interfaces[interface_idx].ipv4_addr;
         print_addr_4((uint8_t*)&ipv4_addr);
@@ -320,17 +322,17 @@ void* loop(void* _interface_idx) {
         iov_cnt = 1;
         if (pfh.linktype == 1) {
             /* 
-             * reply_interface_idx could be changed down the call chain of process_ethernet 
-             * Assume that we will be sending the host back a reply, instead of forwarding it. 
+             * outgoing_interface_idx could be changed down the call chain of process_ethernet 
+             *  
              */
-            reply_interface_idx = thread_interface_idx; 
-            is_reply_packet = 1;
+            outgoing_interface_idx = thread_interface_idx; 
+            is_for_us = 1;
 		    ret = process_ethernet(in_packet, iov_cnt);
             if (ret <= 0) {
                 if (debug) fprintf(stderr, "[!] process_ethernet returned code: %d\n", ret);
                 continue;
             } 
-            write_pcap(reply_interface_idx);  
+            write_pcap(outgoing_interface_idx);  
         } 
 	}
     pthread_exit(&ret);
@@ -358,7 +360,7 @@ int main(int argc, char *argv[])
 	for (int i = 1 ; i < argc; i++) {
         if (strcmp(argv[i], "-d") == 0) {
             debug++;
-        } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "–default-route") == 0) {
+        } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--default-route") == 0) {
             interface_arg = argv[i+1];
             if (interface_arg == NULL) {
                 fprintf(stderr, "No interface provided. Check -i option.\n");
@@ -367,7 +369,7 @@ int main(int argc, char *argv[])
             }
             setup(interface_arg, num_interfaces);
             /* add interface to routing table */
-            if (strcmp(argv[i], "–default-route") == 0) {
+            if (strcmp(argv[i], "--default-route") == 0) {
                 rip_cache_v4.pb(rip_cache_entry {
                     .addr_family = RIP_ADDRESS_FAMILY,
                     .route_tag = 0,
@@ -378,7 +380,8 @@ int main(int argc, char *argv[])
                     
                     .flag = 0,
                     .timer = time(NULL),
-                    .iface_idx = num_interfaces
+                    .iface_idx = num_interfaces,
+                    .advertiser = 0
                 });
                 default_route_idx = rip_cache_v4.size() - 1;
             } else {
@@ -393,7 +396,8 @@ int main(int argc, char *argv[])
 
                     .flag = 0,
                     .timer = time(NULL),
-                    .iface_idx = num_interfaces
+                    .iface_idx = num_interfaces,
+                    .advertiser = 0
                 });
                 interfaces[num_interfaces].subnet_mask = subnet_mask;
             }
@@ -415,8 +419,8 @@ int main(int argc, char *argv[])
         } 
     }
 
-    if (default_route_idx != -1) std::swap(rip_cache_v4[default_route_idx], rip_cache_v4[0]);
-        
+    // if (default_route_idx != -1) std::swap(rip_cache_v4[default_route_idx], rip_cache_v4[0]);
+
     if (debug) printf("Total number of interfaces: %d\n\n", num_interfaces);
     pthread_t *threads[MAX_NUM_INTERFACES];
     int* thread_idx = (int*)malloc(num_interfaces * sizeof(int));
@@ -432,7 +436,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    loop_rip();
+    create_rip_threads();
 
 
     for (int i = 0 ; i < num_interfaces; i++) {

@@ -9,7 +9,7 @@ PROGRAM="shrub" ## allow specifying a different name for shub program.
 #DEBUG="-d"
 DEBUG=""
 
-RIP_INTERVAL_ARG="-r 1"
+RIP_INTERVAL_ARG="-r 30"
 
 
 ## ARGUMENT PARSING

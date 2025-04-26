@@ -3,10 +3,11 @@
 void print_ethernet(struct eth_hdr *peh) {
     unsigned char *c = (unsigned char*)&(peh->h_proto);
 	printf("%02x:%02x:%02x:%02x:%02x:%02x	%02x:%02x:%02x:%02x:%02x:%02x	0x%02x%02x\n", 
+        peh->h_source[0], peh->h_source[1], peh->h_source[2],
+        peh->h_source[3], peh->h_source[4], peh->h_source[5], 
         peh->h_dest[0], peh->h_dest[1], peh->h_dest[2],
         peh->h_dest[3], peh->h_dest[4], peh->h_dest[5],
-        peh->h_source[0], peh->h_source[1], peh->h_source[2],
-        peh->h_source[3], peh->h_source[4], peh->h_source[5], c[0], c[1]);
+        c[0], c[1]);
 }
 
 int process_arp(struct arp_ipv4_hdr *arp_frame) {
@@ -58,12 +59,12 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
     struct eth_hdr *new_eth = NULL;
     orig_eth->h_proto = htons(orig_eth->h_proto);
 
-    /*
-    if (*(uint64_t*)orig_eth->h_source == interfaces[thread_interface_idx].mac_addr) {
+    
+    if (memcmp(&orig_eth->h_source, &interfaces[thread_interface_idx].mac_addr, 6) == 0) {
         fprintf(stderr, "[!] Packet is from us. Ignoring...\n");
         return 0;
     }
-    */
+    
     switch (orig_eth->h_proto) { 
         case ETHERTYPE_IPV4: // IPv4 
             ret = process_ipv4(in_packet + sizeof(struct eth_hdr), iov_idx + 1);     // Ethernet is only above Pcap header, so hardcode 1
@@ -79,8 +80,13 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
             }
 
             /* Hardcode source addresss's first 2 bytes to 5e:fe as per the testing instructions and how the shim.py works */
-            memcpy(new_eth->h_dest, orig_eth->h_source, 6);
-            memcpy(new_eth->h_source, interfaces[thread_interface_idx].mac_addr, 6);    
+            if (is_for_us) {
+                memcpy(new_eth->h_source, interfaces[thread_interface_idx].mac_addr, 6);    
+                memcpy(new_eth->h_dest, orig_eth->h_source, 6);
+            } else {
+                memcpy(new_eth->h_source, interfaces[outgoing_interface_idx].mac_addr, 6);  
+                memcpy(new_eth->h_dest, orig_eth->h_source, 6);
+            }
             new_eth->h_proto = htons(ETHERTYPE_IPV4);    
 
             iov[iov_idx].iov_base = new_eth;

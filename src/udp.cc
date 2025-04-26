@@ -82,20 +82,9 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
     if (debug) {
         printf("[*] Received UDP datagram:\n");
         printf("\tUDP len:\t%u\n", udp_len);
+        if (debug > 1)  print_udp((struct udp_hdr *)udp_datagram);
     }
-    print_udp((struct udp_hdr *)udp_datagram);
-
-    /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. 
-     * To verify the received cksum, extract it, then set the field to 0 to calculate the checksum ourselves
-     * then compare the calculated checksum with the original checksum.
-     */
-    uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
-    ((struct udp_hdr *)udp_datagram)->cksum = 0;
-    uint16_t our_cksum = udp_cksum((uint16_t*)udp_datagram, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
-     if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
-        fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
-        return -1;
-     }    
+   
     
     struct udp_hdr *hdr = (struct udp_hdr *)udp_datagram;
     int ret = -1;
@@ -136,6 +125,21 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
 
         case UDP_PORT_RIP: // RIP
         {
+            if (debug) {
+                printf("[*] In udp.cc. Received RIP packet:\n");
+                if (debug > 1) print_rip(udp_datagram + sizeof(struct udp_hdr), udp_len - sizeof(struct udp_hdr));
+            }
+            /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. 
+            * To verify the received cksum, extract it, then set the field to 0 to calculate the checksum ourselves
+            * then compare the calculated checksum with the original checksum.
+            */
+            uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
+            ((struct udp_hdr *)udp_datagram)->cksum = 0;
+            uint16_t our_cksum = udp_cksum((uint16_t*)udp_datagram, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
+            if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
+                fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
+                return -1;
+            }    
             ret = process_rip(udp_datagram + sizeof(struct udp_hdr), *(uint32_t *)src_addr, udp_len - sizeof(struct udp_hdr), iov_idx + 1);
             if (ret <= 0) {
                 return ret;
@@ -148,10 +152,22 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             reply_hdr->dst_port = hdr->src_port;
             reply_hdr->src_port = htons(UDP_PORT_RIP);
             
-            reply_hdr->cksum = udp_cksum((uint16_t*)reply_hdr, (uint16_t*)iov[iov_idx+1].iov_base, src_addr, dst_addr, reply_len);
+            if (debug) {
+                printf("[*] In udp.cc. Created RIP reply:\n");
+                if (debug > 1) print_rip((unsigned char*)iov[iov_idx+1].iov_base, iov[iov_idx+1].iov_len);
 
+            }
+
+            reply_hdr->cksum = udp_cksum((uint16_t*)reply_hdr, (uint16_t*)iov[iov_idx+1].iov_base, 
+                                        (uint16_t*)&interfaces[outgoing_interface_idx].ipv4_addr, 
+                                        (uint16_t*)src_addr, reply_len);
+
+            /* different from how we set `iov_len` for ECHO and TIME 
+             * this is because RIP requires another function to create the RIP packet
+             * so we have to write the UDP header to iov[iov_idx] and the RIP packet to iov[iov_idx + 1]
+             */
             iov[iov_idx].iov_base = reply;
-            iov[iov_idx].iov_len = reply_len;
+            iov[iov_idx].iov_len = sizeof(struct udp_hdr); 
             iov_cnt++;
             return reply_len;
         }

@@ -61,8 +61,8 @@ struct interface {
 extern struct interface interfaces[];
 extern int num_interfaces;
 extern __thread int thread_interface_idx; 
-extern __thread int reply_interface_idx;
-extern __thread int is_reply_packet;
+extern __thread int outgoing_interface_idx;
+extern __thread int is_for_us;
 extern int default_route_idx;
 
 extern char tcp_flag_string[]; 
