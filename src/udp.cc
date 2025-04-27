@@ -85,7 +85,18 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
         if (debug > 1)  print_udp((struct udp_hdr *)udp_datagram);
     }
    
-    
+    /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. 
+    * To verify the received cksum, extract it, then set the field to 0 to calculate the checksum ourselves
+    * then compare the calculated checksum with the original checksum.
+    */
+    uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
+    ((struct udp_hdr *)udp_datagram)->cksum = 0;
+    uint16_t our_cksum = udp_cksum((uint16_t*)udp_datagram, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
+    if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
+        fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
+        return -1;
+    }   
+
     struct udp_hdr *hdr = (struct udp_hdr *)udp_datagram;
     int ret = -1;
     switch (ntohs(hdr->dst_port)) {
@@ -127,19 +138,9 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
         {
             if (debug) {
                 printf("[*] In udp.cc. Received RIP packet:\n");
-                if (debug > 1) print_rip(udp_datagram + sizeof(struct udp_hdr), udp_len - sizeof(struct udp_hdr));
+                if (debug > 2) print_rip(udp_datagram + sizeof(struct udp_hdr), udp_len - sizeof(struct udp_hdr));
             }
-            /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. 
-            * To verify the received cksum, extract it, then set the field to 0 to calculate the checksum ourselves
-            * then compare the calculated checksum with the original checksum.
-            */
-            uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
-            ((struct udp_hdr *)udp_datagram)->cksum = 0;
-            uint16_t our_cksum = udp_cksum((uint16_t*)udp_datagram, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
-            if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
-                fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
-                return -1;
-            }    
+ 
             ret = process_rip(udp_datagram + sizeof(struct udp_hdr), *(uint32_t *)src_addr, udp_len - sizeof(struct udp_hdr), iov_idx + 1);
             if (ret <= 0) {
                 return ret;

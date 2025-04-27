@@ -50,7 +50,9 @@ struct interface {
     uint32_t subnet_mask;
     uint32_t ipv6_addr;
     uint8_t mac_addr[6];
+    int rip_cache_idx;  /* the index of the rip_cache_v4 entry for this interface */
     int mtu;
+
     // since we're reading & writing to the same file, we need 2 different FDs 
     // so that the write one can have O_APPEND that will always seek to the EOF to write so we don't overwrite incoming packet
     int pcap_fd_read;

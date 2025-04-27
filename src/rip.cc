@@ -12,20 +12,56 @@ void print_rip(unsigned char *pkt, int pkt_len) {
     printf("\t\tZero:\t\t%u\n", ntohs(hdr->zero));
     int num_entries = (pkt_len - sizeof(struct rip_hdr)) / sizeof(struct rip_message_entry);
     for (int i= 0 ; i < num_entries; i++){
-        struct rip_message_entry *entry = (struct rip_message_entry *)(pkt + sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * i);
         printf("\t\tEntry %d:\n", i);
-        printf("\t\t- Address family:\t%u\n", ntohs(entry->addr_family));
-        printf("\t\t- Route tag:\t%u\n", ntohs(entry->route_tag));
-        printf("\t\t- IP dst:\t");
-        print_addr_4((uint8_t*)&entry->ip_dst);
-        puts("");
-        printf("\t\t- Subnet mask:\t");
-        print_addr_4((uint8_t*)&entry->subnet_mask);
-        puts("");
-        printf("\t\t- Next hop:\t");
-        print_addr_4((uint8_t*)&entry->next_hop);
-        puts("");
-        printf("\t\t- Cost:\t%u\n", ntohs(entry->cost));
+        struct rip_message_entry *entry = (struct rip_message_entry *)(pkt + sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * i);
+        print_rip_entry(entry);
+    }
+}
+
+void print_rip_entry(struct rip_message_entry *entry) {
+    
+    printf("\t\t- Address family:\t%u\n", ntohs(entry->addr_family));
+    printf("\t\t- Route tag:\t%u\n", ntohs(entry->route_tag));
+    printf("\t\t- IP dst:\t");
+    print_addr_4((uint8_t*)&entry->ip_dst);
+    puts("");
+    printf("\t\t- Subnet mask:\t");
+    print_addr_4((uint8_t*)&entry->subnet_mask);
+    puts("");
+    printf("\t\t- Next hop:\t");
+    print_addr_4((uint8_t*)&entry->next_hop);
+    puts("");
+    printf("\t\t- Cost:\t%u\n", ntohl(entry->cost));
+}
+
+void print_rip_cache_entry(struct rip_cache_entry *entry) {
+    printf("\t\t- Address family:\t%u\n", entry->addr_family);
+    printf("\t\t- Route tag:\t%u\n", entry->route_tag);
+    printf("\t\t- IP dst:\t");
+    print_addr_4((uint8_t*)&entry->ip_dst);
+    puts("");
+    printf("\t\t- Subnet mask:\t");
+    print_addr_4((uint8_t*)&entry->subnet_mask);
+    puts("");
+    printf("\t\t- Next hop:\t");
+    print_addr_4((uint8_t*)&entry->next_hop);
+    puts("");
+    printf("\t\t- Cost:\t%u\n", entry->cost);
+    printf("\t\t- Flag:\t%u\n", entry->flag);
+    printf("\t\t- Timer:\t%ld\n", entry->timer);
+    printf("\t\t- Interface idx:\t%u\n", entry->iface_idx);
+    printf("\t\t- Is directly connected:\t%s\n", (entry->is_directly_connected) ? "Yes" : "No");
+    printf("\t\t- Is default route:\t%s\n", (entry->is_default_route) ? "Yes" : "No");
+    printf("\t\t- Advertiser:\t");
+    print_addr_4((uint8_t*)&entry->advertiser);
+    puts("");
+}
+
+void print_rip_cache() {
+    printf("[*] RIP cache:\n");
+    for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
+        printf("\tEntry %d:\n", i);
+        print_rip_cache_entry(&rip_cache_v4[i]);
     }
 }
 
@@ -59,33 +95,38 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
         perror("create_rip_broadcast: ");
         return -1;
     }
-    rip_hdr->command = 1;    // RIP request
+    
+    // RIP request if we first get online, otherwise it's a broadcast response.
+    rip_hdr->command = (request_all_routes) ? 1 : 2;   
     rip_hdr->version = 2;    // addrRIP v2
     rip_hdr->zero = 0;
 
     if (request_all_routes) {
         struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr));
-        entry->addr_family = htons(RIP_ADDRESS_FAMILY);    // IPv4
+        entry->addr_family = 0;    // AF = 0 for all routes
         entry->route_tag = 0;    // no route tag
         entry->ip_dst = 0;
         entry->subnet_mask = 0;
         entry->next_hop = 0;
-        entry->cost = htons(RIP_COST_INFINITY);
+        entry->cost = htonl(RIP_COST_INFINITY);
     } else {
         pthread_mutex_lock(&rip_cache_mutex);
+        /* when we skip the default route, we shouldn't increment the index in our packet. */
+        int j = 0;
         for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
             /* either a deleted entry, OR it is our default route, which we shouldn't advertise */
-            if (rip_cache_v4[i].ip_dst == 0) continue;
+            if (rip_cache_v4[i].is_default_route == 1) continue;
 
             struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr) + 
-                                                                            sizeof(rip_message_entry) * i);
+                                                                            sizeof(rip_message_entry) * j);
             
             entry->addr_family = htons(RIP_ADDRESS_FAMILY);    // IPv4
             entry->route_tag = 0;    // no route tag
             entry->ip_dst = rip_cache_v4[i].ip_dst;
             entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
             entry->next_hop = rip_cache_v4[i].next_hop;
-            entry->cost = htons(rip_cache_v4[i].cost);
+            entry->cost = htonl(rip_cache_v4[i].cost);
+            j++;
         }
         pthread_mutex_unlock(&rip_cache_mutex);
     }
@@ -242,6 +283,7 @@ void create_rip_threads() {
 int create_rip_broadcast_msg(unsigned char **dst, uint32_t ipv4_src_addr) {
     int pkt_len = sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * rip_cache_v4.size();
     if (default_route_idx != -1) pkt_len -= sizeof(struct rip_message_entry);    // don't advertise our default route
+   
     unsigned char *rip_pkt = (unsigned char*)malloc(pkt_len);
     if (!rip_pkt) {
         perror("create_rip_broadcast: ");
@@ -251,21 +293,31 @@ int create_rip_broadcast_msg(unsigned char **dst, uint32_t ipv4_src_addr) {
     hdr->command = 2;    // RIP reply
     hdr->version = 2;    // RIP v2
     hdr->zero = 0;
+    pthread_mutex_lock(&rip_cache_mutex);
+
+    /* when we skip the default route, we shouldn't increment the index in our packet. */
+    int j = 0;
     for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
         /* either a deleted entry, OR it is our default route, which we shouldn't advertise */
-        if (rip_cache_v4[i].ip_dst == 0) continue;
+        if (rip_cache_v4[i].is_default_route == 1) continue;
         struct rip_message_entry *entry = (struct rip_message_entry *)(rip_pkt + sizeof(struct rip_hdr) + 
-                                                                        sizeof(rip_message_entry) * i);
+                                                                        sizeof(rip_message_entry) * j);
         
         entry->addr_family = htons(RIP_ADDRESS_FAMILY);    // IPv4
         entry->route_tag = 0;    // no route tag
         entry->ip_dst = rip_cache_v4[i].ip_dst;
         entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
         entry->next_hop = rip_cache_v4[i].next_hop;
-        entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].next_hop, ipv4_src_addr));
+        entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].advertiser, ipv4_src_addr));
+        j++;
     }
+    pthread_mutex_unlock(&rip_cache_mutex);
     *dst = rip_pkt;
     return pkt_len;
+}
+
+void signal_update() {
+
 }
 
 /*
@@ -286,8 +338,8 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
         return -1;
     }
 
-    /* As per the RFC, make sure it is from one of our interfaces */
-    int from_interface_idx = -1;
+    /* As per the RFC, make sure it is from one of our interfaces (from a directly-connected network)*/
+    int from_interface_idx = -1, rip_cache_idx = -1;
     for (int i = 0 ; i < num_interfaces; i++) {
         if ((interfaces[i].ipv4_addr & interfaces[i].subnet_mask) == (ipv4_src_addr & interfaces[i].subnet_mask)) {
             if (debug) {
@@ -296,6 +348,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
                 puts("");
             }
             from_interface_idx = i;
+            rip_cache_idx = interfaces[from_interface_idx].rip_cache_idx;
             break;
         }
     }
@@ -329,9 +382,10 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
             struct rip_message_entry *reply_rip_entry = (struct rip_message_entry*)(reply_rip_pkt + sizeof(struct rip_hdr) 
                                                                             + sizeof(struct rip_message_entry) * i);
             uint32_t request_entry_ip_dst = request_rip_entry->ip_dst;
-            // uint32_t entry_subnet_mask = (rip_entry->subnet_mask == 0) ? 0xFFFFFFFF : rip_entry->subnet_mask;
+            uint32_t request_entry_subnet_mask = request_rip_entry->subnet_mask;
+
             /* special case, asking for the entire routing table */
-            if (request_entry_ip_dst == 0 && num_entries == 1) { 
+            if (request_rip_entry->addr_family == 0 && num_entries == 1) { 
                 if (debug) {
                     printf("[*] Received RIP request for entire routing table from interface %d - \n", from_interface_idx);
                     print_addr_4((uint8_t*)&interfaces[from_interface_idx].ipv4_addr);
@@ -350,8 +404,8 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
             
             reply_rip_entry->cost = RIP_COST_INFINITY;    // default cost is infinity
             for (int j = 0 ; j < (int)rip_cache_v4.size(); j++) {
-                if ((rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask) == (request_entry_ip_dst & rip_cache_v4[j].subnet_mask)) {
-                    reply_rip_entry->cost = split_horizon_poisoned_reverse((rip_cache_v4[j].cost), rip_cache_v4[j].next_hop, ipv4_src_addr);
+                if ((rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask) == (request_entry_ip_dst & request_entry_subnet_mask)) {
+                    reply_rip_entry->cost = split_horizon_poisoned_reverse(rip_cache_v4[j].cost, rip_cache_v4[j].advertiser, ipv4_src_addr);
                     break;
                 }
             }
@@ -368,8 +422,94 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
         return ret;
 
     } else if (hdr->command == 2) {     // RIP Response/Reply
-        
-    }
+        int num_entries = (pkt_len - sizeof(struct rip_hdr)) / sizeof(struct rip_message_entry);
+        if (num_entries == 0) return -1;
 
+        if (debug) {
+            printf("[*] Received RIP response from interface %d - ", from_interface_idx);
+            print_addr_4((uint8_t*)&interfaces[from_interface_idx].ipv4_addr);
+            puts("");
+        }
+        
+        printf("%d\n", rip_cache_idx);
+        pthread_mutex_lock(&rip_cache_mutex);
+        for (int i = 0 ; i < num_entries; i++) {
+            struct rip_message_entry *reply_rip_entry = (struct rip_message_entry*)(incoming_rip_packet + sizeof(struct rip_hdr) 
+                                                        + sizeof(struct rip_message_entry) * i);
+            uint32_t reply_entry_ip_dst = reply_rip_entry->ip_dst;
+            uint32_t reply_entry_subnet_mask = reply_rip_entry->subnet_mask;
+            uint32_t reply_entry_cost = ntohl(reply_rip_entry->cost);
+            if (reply_entry_ip_dst == 0 || 
+                (reply_entry_cost < 1 || reply_entry_cost > RIP_COST_INFINITY)) {
+                    if (debug > 1) {
+                        printf("[!] Ignoring invalid RIP entry %d: ", i);
+                        print_rip_entry(reply_rip_entry);
+                    }
+                    continue;
+            }
+            
+            reply_entry_cost = std::min(reply_entry_cost + rip_cache_v4[rip_cache_idx].cost, (uint32_t)RIP_COST_INFINITY);
+            int existed = 0; /* 0 if entry is not currently in our cache */
+            for (size_t j = 0  ; j < rip_cache_v4.size(); j++) {
+                /* if the entry is for one of our directly-connected network, do nothing */
+                if ((reply_entry_ip_dst & reply_entry_subnet_mask) == (rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask)) {
+                    if (rip_cache_v4[j].is_directly_connected) {
+                        existed = 1;
+                        break;
+                    }
+                    /* If this datagram is from the same router as the existing route, reinitialize the timeout.*/                     
+                    if (rip_cache_v4[j].next_hop == ipv4_src_addr) {
+                        rip_cache_v4[j].timer = time(NULL);
+                    }
+                    /* https://datatracker.ietf.org/doc/html/rfc2453#section-3.9.2 */
+                    if (reply_entry_cost != rip_cache_v4[j].cost) {
+                        
+                        rip_cache_v4[j].cost = reply_entry_cost;
+                        rip_cache_v4[j].next_hop = reply_rip_entry->next_hop;
+                        rip_cache_v4[j].advertiser = ipv4_src_addr;
+                        rip_cache_v4[j].flag = ROUTE_CHANGE_FLAG;
+                        rip_cache_v4[j].timer = time(NULL);
+                        rip_cache_v4[j].iface_idx = from_interface_idx;
+                        rip_cache_v4[j].is_directly_connected = 0;
+                        rip_cache_v4[j].is_default_route = 0;
+                        if (debug > 1) {
+                            printf("[*] Updated RIP entry %d: ", i);
+                            print_rip_cache();
+                        }
+                        signal_update();
+                    } else {
+                        rip_cache_v4[j].timer = time(NULL);
+                    }
+                    existed = 1;
+                    break;
+                }
+            }  
+
+            if (!existed) {
+                
+                rip_cache_v4.pb(rip_cache_entry {
+                    .addr_family = RIP_ADDRESS_FAMILY,
+                    .route_tag = ntohs(reply_rip_entry->route_tag),
+                    .ip_dst = reply_entry_ip_dst,
+                    .subnet_mask = reply_entry_subnet_mask,
+                    .next_hop = ipv4_src_addr,
+                    .cost = reply_entry_cost,
+
+                    .flag = ROUTE_CHANGE_FLAG,
+                    .timer = time(NULL),
+                    .iface_idx = from_interface_idx,
+                    .is_directly_connected = 0,
+                    .is_default_route = 0,
+                    .advertiser = ipv4_src_addr
+                });
+                if (debug > 1) {
+                    printf("[*] Added new RIP entry %d: ", i);
+                    print_rip_cache();
+                }
+                signal_update();
+            }
+        }
+        pthread_mutex_unlock(&rip_cache_mutex);
+    }
     return -1;
 }

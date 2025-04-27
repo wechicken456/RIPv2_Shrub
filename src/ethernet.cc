@@ -61,7 +61,7 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
 
     
     if (memcmp(&orig_eth->h_source, &interfaces[thread_interface_idx].mac_addr, 6) == 0) {
-        fprintf(stderr, "[!] Packet is from us. Ignoring...\n");
+        fprintf(stderr, "[!] process_ethernet: Packet is from us. Ignoring...\n");
         return 0;
     }
     
@@ -85,7 +85,8 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
                 memcpy(new_eth->h_dest, orig_eth->h_source, 6);
             } else {
                 memcpy(new_eth->h_source, interfaces[outgoing_interface_idx].mac_addr, 6);  
-                memcpy(new_eth->h_dest, orig_eth->h_source, 6);
+                uint8_t dummy_mac_addr[6] = {0x5e, 0xfe, 0x00, 0x00, 0x00, 0x00};
+                memcpy(new_eth->h_dest, &dummy_mac_addr, 6);
             }
             new_eth->h_proto = htons(ETHERTYPE_IPV4);    
 

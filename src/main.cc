@@ -224,7 +224,7 @@ void setup(char *interface_arg, int interface_idx) {
     uint8_t *mac_addr_ptr = interfaces[interface_idx].mac_addr;
     mac_addr_ptr[0] = 0x5e;
     mac_addr_ptr[1] = 0xfe;
-    memcpy(mac_addr_ptr + 2, &interfaces[thread_interface_idx].ipv4_addr, 4);  
+    memcpy(mac_addr_ptr + 2, &interfaces[interface_idx].ipv4_addr, 4);  
 }
 
 void* loop(void* _interface_idx) {
@@ -381,8 +381,11 @@ int main(int argc, char *argv[])
                     .flag = 0,
                     .timer = time(NULL),
                     .iface_idx = num_interfaces,
+                    .is_directly_connected = 1,
+                    .is_default_route = 1,
                     .advertiser = 0
                 });
+                interfaces[num_interfaces].rip_cache_idx = rip_cache_v4.size() - 1;
                 default_route_idx = rip_cache_v4.size() - 1;
             } else {
                 uint32_t subnet_mask = ((uint32_t)1 << interfaces[num_interfaces].mask_length) - 1;
@@ -397,8 +400,11 @@ int main(int argc, char *argv[])
                     .flag = 0,
                     .timer = time(NULL),
                     .iface_idx = num_interfaces,
+                    .is_directly_connected = 1,
+                    .is_default_route = 0,
                     .advertiser = 0
                 });
+                interfaces[num_interfaces].rip_cache_idx = rip_cache_v4.size() - 1;
                 interfaces[num_interfaces].subnet_mask = subnet_mask;
             }
             i++;
@@ -429,6 +435,12 @@ int main(int argc, char *argv[])
         thread_idx[i] = i;
         threads[i] = (pthread_t*)malloc(sizeof(pthread_t));
         printf("thread_idx: %d\n", thread_idx[i]);  
+        if (default_route_idx != -1 && 
+            i != default_route_idx && 
+            rip_cache_v4[i].next_hop == rip_cache_v4[default_route_idx].next_hop) {
+            fprintf(stderr, "[!] Not spawning duplicate thread (id = %d) for the default route!!!\n", i);
+            continue;
+        }
         ret = pthread_create(threads[i], NULL, loop, (void*)&thread_idx[i]);
         if (ret < 0) {
             fprintf(stderr, "[!] Failed to create thread for interface %d. ABORTING!!!\n", i);

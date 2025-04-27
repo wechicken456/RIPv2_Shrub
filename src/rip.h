@@ -8,7 +8,7 @@
 #define RIP_COST_INFINITY 16
 #define RIP_ADDRESS_FAMILY 2
 #define RIP_MULTICAST_ADDR htonl(0xE0000009)
-
+#define ROUTE_CHANGE_FLAG 1
 
 /* https://datatracker.ietf.org/doc/html/rfc1058#section-3.2 */
 struct rip_hdr {
@@ -37,7 +37,9 @@ struct rip_cache_entry {
 
     uint32_t flag;
     time_t timer; 
-    int iface_idx;  /* the interface responsible for this route */
+    int iface_idx;
+    int is_directly_connected; 
+    int is_default_route; /* 1 if the entry is the default route */
     uint32_t advertiser;  /* the ipv4 addr of the router that we learned this route from */
 };
 
@@ -52,8 +54,12 @@ int process_rip(unsigned char *rip_packet, uint32_t ipv4_src_addr, int pkt_len, 
 void create_rip_threads();
 void* loop_rip_broadcast(void* interface_idx);
 int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int interface_idx, int request_all_routes);
+
 void print_rip(unsigned char *pkt, int pkt_len);
+void print_rip_entry(struct rip_message_entry *entry);
+
 int split_horizon_poisoned_reverse(int cost, int iface_idx, int from_iface_idx);
 int create_rip_broadcast_msg(unsigned char **dst, int ipv4_src_addr);
 extern int write_pcap(int interface_idx);
+void signal_update();
 #endif
