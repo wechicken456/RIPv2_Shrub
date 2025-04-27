@@ -88,3 +88,23 @@ Use [pthread_mutex_lock](https://stackoverflow.com/a/40880980) before any read/w
 As per the RFC, first, check if a packet is from and to port 520.
 
 Then, check if the IPv4 source is from one of our interfaces. If it is not, ignore it. This can be done by looping through the global `interfaces` accessible by all threads.
+
+Section 3.7 of RFC 2453 states:
+
+> The special address 0.0.0.0 is used to describe a default route.  A default route is used when it is not convenient to list every possible network in the RIP updates, and when **one or more closely- connected routers in the system are prepared to handle traffic to the networks that are not listed explicitly. **
+
+=> We should advertise the default route, with the next hop being our address.
+
+## `outgoing_interface_idx` vs `thread_interface_idx` vs `meant_for_interface_idx`
+
+All are thread local variables.
+
+By default, `outgoing_interface_idx` = `meant_for_interface_idx` = `thread_interface_idx`.
+where `thread_interface_idx` is the interface the thread is responsible for reading pcap packets from and write to.
+
+However, say we have 2 interfaces `172.31.1.254` and `172.31.2.253`. When a packet is sent to us on `172.31.2.253`, but we received (read) it on `172.31.1.254`, we should use the same IP address (`172.31.2.253`) in our response packet, but we shouldn't immediately conclude that we should write the response packet back to the interface we read it from (`172.31.1.254`).
+
+This is because there could be more efficient routes to get back to the source.
+Hence, we should check the RIP table and find the interface to write the response back to, which we we will assign to `outgoing_interface_idx`.
+
+All protocol layers will use `outgoing_interface_idx` to set the appropriate source addresses for their packets.

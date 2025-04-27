@@ -81,7 +81,7 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
 
             /* Hardcode source addresss's first 2 bytes to 5e:fe as per the testing instructions and how the shim.py works */
             if (is_for_us) {
-                memcpy(new_eth->h_source, interfaces[thread_interface_idx].mac_addr, 6);    
+                memcpy(new_eth->h_source, interfaces[meant_for_interface_idx].mac_addr, 6);    
                 memcpy(new_eth->h_dest, orig_eth->h_source, 6);
             } else {
                 memcpy(new_eth->h_source, interfaces[outgoing_interface_idx].mac_addr, 6);  

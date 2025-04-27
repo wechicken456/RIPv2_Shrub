@@ -9,6 +9,8 @@
 #define RIP_ADDRESS_FAMILY 2
 #define RIP_MULTICAST_ADDR htonl(0xE0000009)
 #define ROUTE_CHANGE_FLAG 1
+#define RIP_CACHE_ENTRY_STATE_ACTIVE 0
+#define RIP_CACHE_ETNRY_STATE_DELETED 1
 
 /* https://datatracker.ietf.org/doc/html/rfc1058#section-3.2 */
 struct rip_hdr {
@@ -41,6 +43,7 @@ struct rip_cache_entry {
     int is_directly_connected; 
     int is_default_route; /* 1 if the entry is the default route */
     uint32_t advertiser;  /* the ipv4 addr of the router that we learned this route from */
+    int state; /* 0 = ACTIVE, 1 = DELETED */
 };
 
 extern std::vector<struct rip_cache_entry> rip_cache_v4;
@@ -57,6 +60,8 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
 
 void print_rip(unsigned char *pkt, int pkt_len);
 void print_rip_entry(struct rip_message_entry *entry);
+void print_rip_cache();
+void print_rip_cache_entry(struct rip_cache_entry *entry);
 
 int split_horizon_poisoned_reverse(int cost, int iface_idx, int from_iface_idx);
 int create_rip_broadcast_msg(unsigned char **dst, int ipv4_src_addr);

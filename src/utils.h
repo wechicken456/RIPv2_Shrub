@@ -32,4 +32,5 @@ Then, when we add ~S: S + ~S = 0xFFFF. Take 1's complement = ~0xFFFF = 0.
 unsigned short in_cksum(const unsigned short *addr, int len, unsigned short csum); 
 int verify_cksum(void *data, int len);
 
+int get_interface_for_route(uint32_t dst_addr);
 #endif

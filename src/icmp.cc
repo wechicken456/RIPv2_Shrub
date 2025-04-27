@@ -58,3 +58,66 @@ int process_icmp(unsigned char *icmp_packet, int pkt_len, int iov_idx) {
     }
     return -1;
 }
+
+/* See RFC: https://datatracker.ietf.org/doc/html/rfc792 */
+int iov_create_icmp_error(unsigned char *in_ipv4_pkt, int in_ipv4_len, int in_ipv4_hdr_len, uint8_t icmp_type, uint8_t icmp_code, int iov_idx) {
+    unsigned char *icmp_pkt;
+    int icmp_len = 0;
+    uint32_t in_ipv4_src_addr = *(uint32_t*)( ((struct ipv4_hdr *)in_ipv4_pkt)->src_addr);
+
+    /* if for some reason, we can't get back to the source, write it back to the interface we got this packet from */
+    outgoing_interface_idx = get_interface_for_route(in_ipv4_src_addr);
+    if (outgoing_interface_idx == -1) outgoing_interface_idx = thread_interface_idx; 
+
+
+    switch (icmp_type) {
+        case ICMP_TYPE_DEST_UNREACHABLE:
+        {
+            icmp_len  = sizeof(struct icmp_dest_unreachable_message_hdr) + in_ipv4_hdr_len + 8;
+            icmp_pkt = (unsigned char*)malloc(icmp_len);
+            struct icmp_dest_unreachable_message_hdr *icmp_hdr = (struct icmp_dest_unreachable_message_hdr *)icmp_pkt;
+            if (!icmp_pkt) {
+                perror("create_icmp_error: ");
+                return - 1;
+            }
+            icmp_hdr->type = ICMP_TYPE_DEST_UNREACHABLE;
+            icmp_hdr->code = icmp_code;
+            icmp_hdr->unused = 0;
+            memcpy(icmp_pkt + sizeof(struct icmp_dest_unreachable_message_hdr), in_ipv4_pkt, in_ipv4_hdr_len);
+            memcpy(icmp_pkt + sizeof(struct icmp_dest_unreachable_message_hdr) + in_ipv4_hdr_len, in_ipv4_pkt + in_ipv4_hdr_len, 8);            icmp_hdr->cksum = 0;
+            icmp_hdr->cksum = 0;
+            icmp_hdr->cksum = in_cksum((uint16_t*)icmp_hdr, icmp_len, 0);
+            break;
+        }
+        case ICMP_TYPE_TTL_EXPIRED:
+        {
+            icmp_len  = sizeof(struct icmp_ttl_expired_message_hdr) + in_ipv4_hdr_len + 8;
+            icmp_pkt = (unsigned char*)malloc(icmp_len);
+            struct icmp_ttl_expired_message_hdr *icmp_hdr = (struct icmp_ttl_expired_message_hdr *)icmp_pkt;
+            if (!icmp_pkt) {
+                perror("create_icmp_error: ");
+                return - 1;
+            }
+            icmp_hdr->type = ICMP_TYPE_TTL_EXPIRED;
+            icmp_hdr->code = icmp_code;
+            icmp_hdr->unused = 0;
+            memcpy(icmp_pkt + sizeof(struct icmp_ttl_expired_message_hdr), in_ipv4_pkt, in_ipv4_hdr_len);
+            memcpy(icmp_pkt + sizeof(struct icmp_ttl_expired_message_hdr) + in_ipv4_hdr_len, in_ipv4_pkt + in_ipv4_hdr_len, 8);
+            icmp_hdr->cksum = 0;
+            icmp_hdr->cksum = in_cksum((uint16_t*)icmp_hdr, icmp_len, 0);
+            break;            
+        }
+        default:
+        {
+            fprintf(stderr, "[!] Invalid ICMP type for error: %d\n", icmp_type);
+            return -1;
+        }
+    }
+    
+    iov[iov_idx].iov_base = icmp_pkt;
+    iov[iov_idx].iov_len = icmp_len;
+    iov_cnt++;
+
+    return icmp_len;
+}
+

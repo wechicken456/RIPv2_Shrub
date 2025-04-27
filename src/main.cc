@@ -41,6 +41,7 @@ struct interface interfaces[MAX_NUM_INTERFACES];
 int num_interfaces = 0;
 __thread int thread_interface_idx;
 __thread int outgoing_interface_idx;
+__thread int meant_for_interface_idx;
 
 /* 1 if dest ip addr is for us, so we need to change the src & dst addresses. Otherwise just forward it */
 __thread int is_for_us = 0; 
@@ -326,6 +327,7 @@ void* loop(void* _interface_idx) {
              *  
              */
             outgoing_interface_idx = thread_interface_idx; 
+            meant_for_interface_idx = thread_interface_idx;
             is_for_us = 1;
 		    ret = process_ethernet(in_packet, iov_cnt);
             if (ret <= 0) {
@@ -448,6 +450,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    print_rip_cache();
     create_rip_threads();
 
 

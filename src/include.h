@@ -34,6 +34,10 @@
 #define IPV4_TYPE_ICMP 0x1
 #define ICMP_TYPE_ECHO 0x8
 #define ICMP_TYPE_ECHO_REPLY 0x0
+#define ICMP_TYPE_TTL_EXPIRED 0xB
+#define ICMP_TYPE_DEST_UNREACHABLE 0x3
+#define ICMP_CODE_TTL_EXPIRED 0x0
+#define ICMP_CODE_NO_ROUTE 0x3
 #define UDP_PORT_ECHO 7
 #define UDP_PORT_TIME 37
 #define UDP_PORT_RIP 520
@@ -64,6 +68,7 @@ extern struct interface interfaces[];
 extern int num_interfaces;
 extern __thread int thread_interface_idx; 
 extern __thread int outgoing_interface_idx;
+extern __thread int meant_for_interface_idx;
 extern __thread int is_for_us;
 extern int default_route_idx;
 

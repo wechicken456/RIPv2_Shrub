@@ -9,7 +9,7 @@ DEBUG="-d -d"
 #DEBUG="-d"
 #DEBUG=""
 
-RIP_INTERVAL_ARG="-r 30"
+RIP_INTERVAL_ARG="-r 1"
 
 
 ## ARGUMENT PARSING
@@ -90,7 +90,7 @@ if [[ -z "${DRYRUN}" ]]; then
 	rm ${PCAP_NAME_1} ${PCAP_NAME_2} ${PCAP_NAME_3} ${PCAP_NAME_4} ${PCAP_NAME_5}
 
 	if [[ -n "${DOCKERIP}" ]]; then
-		echo "Adding IP route to docker container located at ip ${DOCKERIP}"
+		echo "Adding IP route to docker container located at ip vct${DOCKERIP}"
 		sudo ip route add "${SHIM_MAX_SUBNET}/${SHIM_MAX_MASK}" via "${DOCKERIP}"
 	fi
 else

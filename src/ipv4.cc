@@ -2,10 +2,74 @@
 #include "tcp.h"
 #include "udp.h"
 #include "rip.h"
+#include "icmp.h"
+
+#include "ethernet.h"
 #include "include.h"
 
+int iov_create_ipv4_hdr(int32_t src_addr, uint32_t dst_addr, int data_len, int proto_id, int iov_idx) {
+    // allocate buffer for the IPv4 header. 
+    struct ipv4_hdr *ipv4_hdr = (struct ipv4_hdr *)malloc(sizeof(struct ipv4_hdr));
+    if (!ipv4_hdr) {
+        perror("iov_create_ipv4_hdr: ");
+        return -1;
+    }
+    ipv4_hdr->version_ihl = 0x45;                                              
+    ipv4_hdr->type_of_service = 0;                      
+    ipv4_hdr->total_len = htons(sizeof(struct ipv4_hdr) + data_len);       // Total length = IPv4 header + ICMP packet   
+    ipv4_hdr->frame_ident = 0x4141;
+    ipv4_hdr->fragment_offset = 0;                                       
+    ipv4_hdr->time_to_live = 64;                                              // random TTL 
+    ipv4_hdr->next_proto_id = proto_id;                                
+
+    memcpy(ipv4_hdr->src_addr, &src_addr, 4); 
+    memcpy(ipv4_hdr->dst_addr, &dst_addr, 4);
+    ipv4_hdr->hdr_checksum = 0;                                            // checksum is set to 0 before calculating it
+    ipv4_hdr->hdr_checksum = in_cksum((unsigned short *)ipv4_hdr, sizeof(struct ipv4_hdr), 0);
+    iov[iov_idx].iov_base = ipv4_hdr;
+    iov[iov_idx].iov_len = sizeof(struct ipv4_hdr);
+    iov_cnt++;
+    return sizeof(struct ipv4_hdr);
+}
+
+int get_interface_for_route(uint32_t dst_addr) {
+    int ret_interface_idx = -1;
+    pthread_mutex_lock(&rip_cache_mutex);
+    for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
+
+        if ( i == default_route_idx) continue;
+
+        /* if it's multicast, we don't have to reply. But if we do, 
+        * send it back to where it came from, which is the interface this thread is responsible for
+        */
+        if (dst_addr == RIP_MULTICAST_ADDR) { 
+            ret_interface_idx = thread_interface_idx; 
+            break;
+        }
+
+        /* find the interface we should forward this packet to */
+        if (rip_cache_v4[i].ip_dst == (dst_addr & rip_cache_v4[i].subnet_mask)) {
+            if (rip_cache_v4[i].cost == RIP_COST_INFINITY) {
+                continue;
+            }
+            ret_interface_idx = rip_cache_v4[i].iface_idx;
+            break;
+        }
+    }
+    if (default_route_idx != -1 && ret_interface_idx == -1) {
+        /* if we don't have a route for this packet, but we have a default route, use it 
+         * If the default route is directly connected, then we have an interface for it 
+         * Otherwise, another router advertised it, so we have to write the packet to the interface that received the advertisement
+         */
+        if (rip_cache_v4[default_route_idx].is_directly_connected) ret_interface_idx = default_route_idx;
+        else ret_interface_idx = rip_cache_v4[default_route_idx].iface_idx;
+    }
+    pthread_mutex_unlock(&rip_cache_mutex);
+    return ret_interface_idx;
+}
+
 /* return an integer indicating the logical (if all the encapsulated packets were contiguous)
- * length of the IPv4 packet (including encapsulated packets): <0 for error, 0 if not for us (the interface this thread is responsible for reading from), 
+ * length of the IPv4 packet (including outgoing_interface_idxencapsulated packets): <0 for error, 0 if not for us (the interface this thread is responsible for reading from), 
  * or the length of the packet if successful.
  * Note that this function only allocates the IPv4 header, and not the encapsulated packets. The rest of the packet lives in the iov array.
  * So this return value doesn't indicate the BUFFER size (iov_len) of the IPv4 header at iov[iov_idx], but the logical size of the entire packet, if it was contiguous.
@@ -41,62 +105,54 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     }
     
     /* if the packet is from us, ignore it */
-    if (interfaces[thread_interface_idx].ipv4_addr == *(uint32_t*)&(hdr->src_addr)) {
-        if (debug) fprintf(stderr, "[*] process_ipv4: Packet is from us. Ignoring...\n");
-        return 0;
+    for (int i = 0 ;  i < num_interfaces; i++) {
+        if (interfaces[i].ipv4_addr == *(uint32_t*)&(hdr->src_addr)) {
+            if (debug) fprintf(stderr, "[*] process_ipv4: Packet is from us. Ignoring...\n");
+            return 0;
+        }
     }
-
+   
     // printf("interfaces[thread_interface_idx].ipv4_addr = %u\n", interfaces[thread_interface_idx].ipv4_addr);
     // printf("hdr->dst_addr = %u\n", *(uint32_t*)&(hdr->dst_addr));
     /* check if the packet is for us */
-    if (interfaces[thread_interface_idx].ipv4_addr == *(uint32_t*)&(hdr->dst_addr)
-        || *(uint32_t*)&(hdr->dst_addr) == RIP_MULTICAST_ADDR
+    outgoing_interface_idx = thread_interface_idx;
+    meant_for_interface_idx = thread_interface_idx;
+    if (*(uint32_t*)&(hdr->dst_addr) == RIP_MULTICAST_ADDR
         || *(uint32_t*)&(hdr->dst_addr) == 0xFFFFFFFF) {
+        meant_for_interface_idx = thread_interface_idx;
         is_for_us = 1;
     } else {
-        is_for_us = 0;
+        for (int i = 0 ; i < num_interfaces; i++) {
+            if (interfaces[i].ipv4_addr == *(uint32_t*)&(hdr->dst_addr)) {
+                meant_for_interface_idx = i;
+                outgoing_interface_idx = i;
+                is_for_us = 1;
+                break;
+                /* UDP header */
+            } else {
+                is_for_us = 0;
+            }
+        }
     }
 
 
-    /* check if we have a route for this packet */
+
+    /* forward if it's not for us */
     if (!is_for_us) {
-        int found = 0; 
-        pthread_mutex_lock(&rip_cache_mutex);
-        for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
-            uint32_t dst_addr = *(uint32_t*)&hdr->dst_addr;
-
-            if ( i == default_route_idx) continue;
-
-            /* if it's multicast, we don't have to reply. But if we do, 
-            * send it back to where it came from, which is the interface this thread is responsible for
-            */
-            if (dst_addr == RIP_MULTICAST_ADDR) { 
-                found = 1;
-                outgoing_interface_idx = thread_interface_idx; 
-                break;
-            }
-
-            /* find the interface we should forward this packet to */
-            if (rip_cache_v4[i].ip_dst == (dst_addr & rip_cache_v4[i].subnet_mask)) {
-                if (rip_cache_v4[i].cost == RIP_COST_INFINITY) {
-                    continue;
-                }
-                outgoing_interface_idx = rip_cache_v4[i].iface_idx;
-                found = 1;
-            }
-        }
-        if (default_route_idx != -1 && !found) {
-            /* if we don't have a route for this packet, but we have a default route, use it */
-            outgoing_interface_idx = default_route_idx;
-            found = 1;
-        }
-        pthread_mutex_unlock(&rip_cache_mutex);
-        if (!found) {
-            fprintf(stderr, "[!] No route for ");
+        int found_interface_idx = get_interface_for_route(*(uint32_t*)&(hdr->dst_addr));
+        if (found_interface_idx == -1) {
+            fprintf(stderr, "[!] NOT for us: No route for ");
             print_addr_4((uint8_t*)&hdr->dst_addr);
-            puts(""); 
-            return -1;
+            puts("\nSending ICMP error message..."); 
+            int icmp_len = iov_create_icmp_error(in_packet, ntohs(hdr->total_len), ipv4_hdr_len, ICMP_TYPE_DEST_UNREACHABLE, ICMP_CODE_NO_ROUTE, iov_idx + 1);
+            int ipv4_hdr_len = iov_create_ipv4_hdr(interfaces[outgoing_interface_idx].ipv4_addr, *(uint32_t*)&(hdr->src_addr), icmp_len, IPPROTO_ICMP, iov_idx);
+            if (icmp_len <= 0 || ipv4_hdr_len <= 0) {
+                fprintf(stderr, "[!] Failed to create ICMP error packet for interface %d...!!!\n", outgoing_interface_idx);
+                return -1;
+            }
+            return icmp_len + ipv4_hdr_len;
         }
+        outgoing_interface_idx = found_interface_idx;
                 
         /* If found a route to forward this packet, use it
          * we have to create a new packet and copy from it instead of using the original one 
@@ -104,13 +160,19 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
          * while write_pcap will free the buffers in the iov array. So we can't free the global buffer.
          */
         fprintf(stderr, "[!] Packet is not for us, but we have a route for it. Forwarding...\n");
-        hdr->time_to_live = ntohs(htons(hdr->time_to_live) - 1);
-        if (hdr->time_to_live == 0) {
+        if (hdr->time_to_live == 1) {
             fprintf(stderr, "[!] TTL expired for ");
             print_addr_4((uint8_t*)&hdr->dst_addr);
             puts("");
-            return -1;
+            int icmp_len = iov_create_icmp_error(in_packet, ntohs(hdr->total_len), ipv4_hdr_len, ICMP_TYPE_TTL_EXPIRED, ICMP_CODE_TTL_EXPIRED, iov_idx + 1);
+            int ipv4_hdr_len = iov_create_ipv4_hdr(interfaces[outgoing_interface_idx].ipv4_addr, *(uint32_t*)&(hdr->src_addr), icmp_len, IPPROTO_ICMP, iov_idx);
+            if (icmp_len <= 0 || ipv4_hdr_len <= 0) {
+                fprintf(stderr, "[!] Failed to create ICMP error packet for interface %d...!!!\n", outgoing_interface_idx);
+                return -1;
+            }
+            return icmp_len + ipv4_hdr_len;
         }
+        hdr->time_to_live = ntohs(htons(hdr->time_to_live) - 1);
         hdr->hdr_checksum = 0;
         hdr->hdr_checksum = in_cksum((unsigned short *)hdr, ipv4_hdr_len, 0);
 
@@ -122,6 +184,23 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
         iov_cnt++;
         return hdr->total_len;
     }
+
+    /* it is meant for us, so find a route to send it back */
+    int found_interface_idx = get_interface_for_route(*(uint32_t*)&(hdr->src_addr));
+    if (found_interface_idx == -1) {
+        fprintf(stderr, "[!] For us: but can't find route to reply to...");
+        print_addr_4((uint8_t*)&hdr->src_addr);
+        puts("\nSending ICMP error message..."); 
+        int icmp_len = iov_create_icmp_error(in_packet, ntohs(hdr->total_len), ipv4_hdr_len, ICMP_TYPE_DEST_UNREACHABLE, ICMP_CODE_NO_ROUTE, iov_idx + 1);
+        int ipv4_hdr_len = iov_create_ipv4_hdr(interfaces[outgoing_interface_idx].ipv4_addr, *(uint32_t*)&(hdr->src_addr), icmp_len, IPPROTO_ICMP, iov_idx);
+        if (icmp_len <= 0 || ipv4_hdr_len <= 0) {
+            fprintf(stderr, "[!] Failed to create ICMP error packet for interface %d...!!!\n", outgoing_interface_idx);
+            return -1;
+        }
+        return icmp_len + ipv4_hdr_len;
+    }
+    outgoing_interface_idx = found_interface_idx;
+
     // verify IPv4 checksum
     if (verify_cksum(hdr, ipv4_hdr_len)) {   // S + ~S === 0
         fprintf(stderr, "[!] INVALID IPv4 CHECKSUM.\n");
@@ -166,11 +245,11 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
 
              /* only change the src and dst addresses if we're replying back to the host. Otherwise copy the same addresses and forward the packet */
             if (is_for_us) {  
-                memcpy(&reply_iph->src_addr, &interfaces[outgoing_interface_idx].ipv4_addr, 4); 
-                memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
+                memcpy(reply_iph->src_addr, &interfaces[meant_for_interface_idx].ipv4_addr, 4); 
+                memcpy(reply_iph->dst_addr, hdr->src_addr, 4);
             } else {
-                memcpy(&reply_iph->src_addr, hdr->src_addr, 4);
-                memcpy(&reply_iph->dst_addr, hdr->dst_addr, 4);
+                memcpy(reply_iph->src_addr, hdr->src_addr, 4);
+                memcpy(reply_iph->dst_addr, hdr->dst_addr, 4);
             }
             // checksum is computed over ONLY the header as per RFC 791
             reply_iph->hdr_checksum = in_cksum((unsigned short *)reply_iph, sizeof(*reply_iph), 0);
@@ -206,11 +285,11 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             
             /* only change the src and dst addresses if we're replying back to the host */
              if (is_for_us) {  
-                memcpy(&reply_iph->src_addr, &interfaces[outgoing_interface_idx].ipv4_addr, 4); 
-                memcpy(&reply_iph->dst_addr, hdr->src_addr, 4);
+                memcpy(reply_iph->src_addr, &interfaces[meant_for_interface_idx].ipv4_addr, 4); 
+                memcpy(reply_iph->dst_addr, hdr->src_addr, 4);
             } else {
-                memcpy(&reply_iph->src_addr, hdr->src_addr, 4);
-                memcpy(&reply_iph->dst_addr, hdr->dst_addr, 4);
+                memcpy(reply_iph->src_addr, hdr->src_addr, 4);
+                memcpy(reply_iph->dst_addr, hdr->dst_addr, 4);
             }
 
             // checksum is computed over ONLY the header as per RFC 791

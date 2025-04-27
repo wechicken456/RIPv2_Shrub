@@ -76,7 +76,7 @@ uint16_t udp_cksum(uint16_t *udp_header, uint16_t *udp_data, uint16_t *ip_src, u
  * In the case of RIP: 
  * write only the UDP header to iov[iov_idx], the data portion (the RIP packet) will be at iov[iov_idx + 1]
  * 
- * The IPv4 src_addr is passed as a pointer to the IPv4 address in network byte order so it's convenient calculate the UDP checksum.
+ * The IPv4 src_addr and dst_addr are passed as pointers to the ones in the RECEIVED packet in network byte order so it's convenient to calculate the UDP checksum.
  */
 int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_addr, uint16_t udp_len, int iov_idx) {
     if (debug) {
@@ -85,17 +85,6 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
         if (debug > 1)  print_udp((struct udp_hdr *)udp_datagram);
     }
    
-    /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. 
-    * To verify the received cksum, extract it, then set the field to 0 to calculate the checksum ourselves
-    * then compare the calculated checksum with the original checksum.
-    */
-    uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
-    ((struct udp_hdr *)udp_datagram)->cksum = 0;
-    uint16_t our_cksum = udp_cksum((uint16_t*)udp_datagram, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
-    if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
-        fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
-        return -1;
-    }   
 
     struct udp_hdr *hdr = (struct udp_hdr *)udp_datagram;
     int ret = -1;
@@ -138,9 +127,21 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
         {
             if (debug) {
                 printf("[*] In udp.cc. Received RIP packet:\n");
-                if (debug > 2) print_rip(udp_datagram + sizeof(struct udp_hdr), udp_len - sizeof(struct udp_hdr));
+                if (debug > 1) print_rip(udp_datagram + sizeof(struct udp_hdr), udp_len - sizeof(struct udp_hdr));
             }
  
+            /* UDP checksum is calculated from pseudo IPv4 header, UDP header, UDP data as per the RFC 862. 
+             * To verify the received cksum, extract it, then set the field to 0 to calculate the checksum ourselves
+             * then compare the calculated checksum with the original checksum.
+             */
+            uint16_t in_cksum = ((struct udp_hdr *)udp_datagram)->cksum; 
+            ((struct udp_hdr *)udp_datagram)->cksum = 0;
+            uint16_t our_cksum = udp_cksum((uint16_t*)udp_datagram, (uint16_t*)(udp_datagram + sizeof(struct udp_hdr)), src_addr, dst_addr, udp_len);
+            if (in_cksum != our_cksum) {      // should add to 0 as we already added the original checksum. S + ~S === 0
+                fprintf(stderr, "[!] INVALID UDP CHECKSUM. Received: %u, but computed: %u\n", in_cksum, our_cksum);
+                //return -1;
+            }   
+
             ret = process_rip(udp_datagram + sizeof(struct udp_hdr), *(uint32_t *)src_addr, udp_len - sizeof(struct udp_hdr), iov_idx + 1);
             if (ret <= 0) {
                 return ret;
@@ -159,8 +160,12 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
 
             }
 
+            /* if we're in this function, then it means we're sending back a response
+             * So use the ip address of the interface that we're sending the response from
+             * as the source address in the UDP header checksum
+             */
             reply_hdr->cksum = udp_cksum((uint16_t*)reply_hdr, (uint16_t*)iov[iov_idx+1].iov_base, 
-                                        (uint16_t*)&interfaces[outgoing_interface_idx].ipv4_addr, 
+                                        (uint16_t*)&interfaces[meant_for_interface_idx].ipv4_addr, 
                                         (uint16_t*)src_addr, reply_len);
 
             /* different from how we set `iov_len` for ECHO and TIME 
