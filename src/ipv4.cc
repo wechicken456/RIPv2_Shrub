@@ -3,9 +3,10 @@
 #include "udp.h"
 #include "rip.h"
 #include "icmp.h"
-
 #include "ethernet.h"
 #include "include.h"
+
+int ipv4_reply_proto = 0; /* check ipv4.h for a description */
 
 int iov_create_ipv4_hdr(int32_t src_addr, uint32_t dst_addr, int data_len, int proto_id, int iov_idx) {
     // allocate buffer for the IPv4 header. 
@@ -32,8 +33,20 @@ int iov_create_ipv4_hdr(int32_t src_addr, uint32_t dst_addr, int data_len, int p
     return sizeof(struct ipv4_hdr);
 }
 
-int get_interface_for_route(uint32_t dst_addr) {
+int find_interface_for_nxt_hop_idx(int nxt_hop) {
     int ret_interface_idx = -1;
+    for (int i = 0 ; i < num_interfaces; i++) {
+        if (i == default_route_idx) continue;
+        if ( (nxt_hop & interfaces[i].subnet_mask) == (interfaces[i].ipv4_addr & interfaces[i].subnet_mask) ) { 
+            ret_interface_idx = i;
+            break;
+        }
+    }
+    return ret_interface_idx;
+}
+
+int get_interface_for_route(uint32_t dst_addr) {
+    int nxt_hop_idx = -1, ret_interface_idx = -1;
     pthread_mutex_lock(&rip_cache_mutex);
     for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
 
@@ -43,8 +56,8 @@ int get_interface_for_route(uint32_t dst_addr) {
         * send it back to where it came from, which is the interface this thread is responsible for
         */
         if (dst_addr == RIP_MULTICAST_ADDR) { 
-            ret_interface_idx = thread_interface_idx; 
-            break;
+            pthread_mutex_unlock(&rip_cache_mutex);
+            return thread_interface_idx;
         }
 
         /* find the interface we should forward this packet to */
@@ -52,17 +65,36 @@ int get_interface_for_route(uint32_t dst_addr) {
             if (rip_cache_v4[i].cost == RIP_COST_INFINITY) {
                 continue;
             }
-            ret_interface_idx = rip_cache_v4[i].iface_idx;
+            nxt_hop_idx = i;
             break;
         }
     }
-    if (default_route_idx != -1 && ret_interface_idx == -1) {
+
+    if (nxt_hop_idx != -1) {
+        /* find the interface that is responsible for the next hop 
+         * this could fail, so there's another check below
+         */
+        uint32_t nxt_hop = rip_cache_v4[nxt_hop_idx].next_hop;
+        ret_interface_idx = find_interface_for_nxt_hop_idx(nxt_hop);
+    }
+
+    if (default_route_idx != -1 && ret_interface_idx < 0) {
         /* if we don't have a route for this packet, but we have a default route, use it 
          * If the default route is directly connected, then we have an interface for it 
          * Otherwise, another router advertised it, so we have to write the packet to the interface that received the advertisement
          */
-        if (rip_cache_v4[default_route_idx].is_directly_connected) ret_interface_idx = default_route_idx;
-        else ret_interface_idx = rip_cache_v4[default_route_idx].iface_idx;
+        if (rip_cache_v4[default_route_idx].is_directly_connected) {
+            pthread_mutex_unlock(&rip_cache_mutex);
+            return default_route_idx;
+        }
+
+        /* if the default route is not directly connected, 
+         * then we have to find the interface that is responsible  
+         */
+        nxt_hop_idx = default_route_idx;
+        uint32_t nxt_hop = rip_cache_v4[nxt_hop_idx].next_hop;
+        ret_interface_idx = find_interface_for_nxt_hop_idx(nxt_hop);
+        if (ret_interface_idx < 0) ret_interface_idx = rip_cache_v4[nxt_hop_idx].iface_idx;
     }
     pthread_mutex_unlock(&rip_cache_mutex);
     return ret_interface_idx;
@@ -218,12 +250,14 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     int ret; 
     switch (hdr->next_proto_id) {
         case IPV4_TYPE_TCP:
+            ipv4_reply_proto = IPPROTO_TCP;
             printf("(TCP)\n");
             process_tcp((struct tcp_hdr *)(hdr + ipv4_hdr_len)); 
             break;
         case IPV4_TYPE_UDP:
+            ipv4_reply_proto = IPPROTO_UDP;
             printf("(UDP)\n");
-            ret = process_udp(in_packet + ipv4_hdr_len, (uint16_t*)hdr->src_addr, (uint16_t*)hdr->dst_addr, hdr->total_len - ipv4_hdr_len, iov_idx + 1); 
+            ret = process_udp(in_packet, hdr->total_len, ipv4_hdr_len, (uint16_t*)hdr->src_addr, (uint16_t*)hdr->dst_addr, hdr->total_len - ipv4_hdr_len, iov_idx + 1); 
             if (ret <= 0) {
                 return ret;
             }
@@ -241,7 +275,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             reply_iph->frame_ident = htons(hdr->frame_ident + 1);                    // ID can be whatever 
             reply_iph->fragment_offset = 0;                                       
             reply_iph->time_to_live = 64;                                               // random TTL 
-            reply_iph->next_proto_id = IPPROTO_UDP;                                    // UDP 
+            reply_iph->next_proto_id = ipv4_reply_proto;                                    // UDP 
 
              /* only change the src and dst addresses if we're replying back to the host. Otherwise copy the same addresses and forward the packet */
             if (is_for_us) {  
@@ -260,8 +294,8 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             return reply_iph_size;
 
         case IPV4_TYPE_ICMP:
+            ipv4_reply_proto = IPPROTO_ICMP;
             printf("(ICMP)\n");
-
             // construct an ICMP packet
             ret = process_icmp(in_packet + ipv4_hdr_len, hdr->total_len - ipv4_hdr_len, iov_idx + 1);
             if (ret <= 0) {  

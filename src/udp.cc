@@ -1,6 +1,6 @@
 #include "udp.h"
 #include "rip.h"
-
+#include "icmp.h"
 void print_udp(struct udp_hdr *udp_datagram) {
     printf("\tUDP:\tSport:\t%u\n", ntohs(udp_datagram->src_port));
     printf("\t\tDport:\t%u\n", ntohs(udp_datagram->dst_port));
@@ -78,7 +78,8 @@ uint16_t udp_cksum(uint16_t *udp_header, uint16_t *udp_data, uint16_t *ip_src, u
  * 
  * The IPv4 src_addr and dst_addr are passed as pointers to the ones in the RECEIVED packet in network byte order so it's convenient to calculate the UDP checksum.
  */
-int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_addr, uint16_t udp_len, int iov_idx) {
+int process_udp(unsigned char *ipv4_pkt, int ipv4_pkt_len, int ipv4_hdr_len, uint16_t *src_addr, uint16_t *dst_addr, uint16_t udp_len, int iov_idx) {
+    unsigned char *udp_datagram = ipv4_pkt + ipv4_hdr_len;
     if (debug) {
         printf("[*] Received UDP datagram:\n");
         printf("\tUDP len:\t%u\n", udp_len);
@@ -178,9 +179,13 @@ int process_udp(unsigned char *udp_datagram, uint16_t *src_addr, uint16_t *dst_a
             return reply_len;
         }
            
-        default:
-            fprintf(stderr, "[!] Received port %d... Only support UDP echo at this time...\n", ntohs(hdr->dst_port));
-            return -1;
+        default: 
+            if (debug) {
+                printf("[!] Received UDP packet for unknown port: %u\n", ntohs(hdr->dst_port));
+                printf("[*] Sending ICMP error packet...\n");
+            }
+            ipv4_reply_proto = IPPROTO_ICMP;
+            return iov_create_icmp_error(ipv4_pkt, ipv4_pkt_len, ipv4_hdr_len, ICMP_TYPE_DEST_UNREACHABLE, ICMP_CODE_PORT_UNREACHABLE, iov_idx);
     }
     return ret;
 }

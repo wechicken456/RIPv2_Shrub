@@ -19,5 +19,5 @@ uint16_t udp_cksum(uint16_t *udp_header, uint16_t *udp_data, uint16_t *ip_src, u
  * write the reply packet to iov[iov_idx]
  * where iov_idx (defined in `main.c`, included in `include.h`) is the index of the iov array to which the REPLY ICMP packet will be written. 
  */
-int process_udp(unsigned char *udp_datagram, uint16_t *ip_src, uint16_t *ip_dst, uint16_t udp_len, int iov_idx);
+int process_udp(unsigned char *ipv4_pkt, int ipv4_pkt_len, int ipv4_hdr_len, uint16_t *ip_src, uint16_t *ip_dst, uint16_t udp_len, int iov_idx);
 #endif

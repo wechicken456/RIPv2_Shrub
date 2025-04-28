@@ -26,4 +26,10 @@ struct ipv4_hdr {
  */
 int process_ipv4(unsigned char *in_packet, int iov_idx);
 
+/* throughout the transmission protocol layer (TCP/UDP), we might 
+ * reach an error that forces us to reply with an ICMP error packet. 
+ * In this case, the ipv4 layer functions need to know which protocol (protocol id)
+ * we're replying to so that we can set the correct protocol in the IPv4 header.
+ */
+extern int ipv4_reply_proto;
 #endif
