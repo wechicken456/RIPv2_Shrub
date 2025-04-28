@@ -114,7 +114,10 @@ where `thread_interface_idx` is the interface the thread is responsible for read
 
 However, say we have 2 interfaces `172.31.1.254` and `172.31.2.253`. When a packet is sent to us on `172.31.2.253`, but we received (read) it on `172.31.1.254`, we should use the same IP address (`172.31.2.253`) in our response packet, but we shouldn't immediately conclude that we should write the response packet back to the interface we read it from (`172.31.1.254`).
 
-This is because there could be more efficient routes to get back to the source.
+Consider the scenario where the only path to `.2.253` is through the interface `.1.254`, and the packet is meant for IP address `.2.253`. The interface `.1.254` will pick this packet up, but since it is meant for us, we should process it immediately. 
+
+=> set `meant_for_interface_idx = .2.253`
+
 Hence, we should check the RIP table and find the interface to write the response back to, which we we will assign to `outgoing_interface_idx`.
 
 All protocol layers will use `outgoing_interface_idx` to set the appropriate source addresses for their packets.

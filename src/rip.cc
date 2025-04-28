@@ -361,6 +361,9 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
         fprintf(stderr, "[!] RIP packet is not from one of our interfaces. Ignoring...\n");
         return 0;
     }
+    /* for RIP, only send back a response from the same interface */
+    outgoing_interface_idx = thread_interface_idx;
+    
     //int reply_interface_idx = get_interface_for_route(ipv4_src_addr);
     if (hdr->command == 1) {    // RIP request
     
@@ -459,7 +462,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
             for (size_t j = 0  ; j < rip_cache_v4.size(); j++) {
                 if ((reply_entry_ip_dst & reply_entry_subnet_mask) == (rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask)) {
                     /* if the entry is for one of our directly-connected network, do nothing */
-                    if (rip_cache_v4[j].is_directly_connected) {
+                    if (rip_cache_v4[j].is_directly_connected || rip_cache_v4[j].next_hop == interfaces[thread_interface_idx].ipv4_addr) {
                         existed = 1;
                         break;
                     }

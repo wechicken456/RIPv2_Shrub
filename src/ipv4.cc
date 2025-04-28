@@ -142,7 +142,6 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
         for (int i = 0 ; i < num_interfaces; i++) {
             if (interfaces[i].ipv4_addr == *(uint32_t*)&(hdr->dst_addr)) {
                 meant_for_interface_idx = i;
-                outgoing_interface_idx = i;
                 is_for_us = 1;
                 break;
                 /* UDP header */
