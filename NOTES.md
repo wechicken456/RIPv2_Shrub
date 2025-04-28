@@ -67,9 +67,9 @@ RFC: https://datatracker.ietf.org/doc/html/rfc792
 The data received in the echo message must be returned in the echo reply message!
 
 
-
 # Shrub dev notes
 
+## Multithreading 
 
 For each shrub instance (program), spawn a reading thread for each interface. This thread will read packets from that interface and write reply packets - which can go to other interfaces. 
 
@@ -79,6 +79,16 @@ For each shrub instance (program), spawn a reading thread for each interface. Th
 **Thread Local Storage**: the `iov`s.
 
 As per the testing instruction, and the nature of the [shim.py](./shim.py), hardcode the MAC source address for EVERY reply packet to start with `5e:fe`.
+
+## iov
+
+By default, we assume we will be responding to a packet that we captured. The packet will propagate up the protocol layers through the functions `process_X`, where `X` could be `ethernet`, `ipv4`, `tcp/udp`, etc. These functions are passed the argument `iov_idx`, which stands the for index of the protocol layer. E.g. `1` for `ethernet`, `2` for `ipv4`, etc. and `0` is for the pcap packet header.
+
+Each of these functions will create their own header for their layer, and place it in the `iov` at `iov_idx`.
+
+For some implementations, it is more conveninent to just create the entire packet and place it into 1 single `iov` buffer at `iov[1]`, so sometimes we will do that.
+
+If we need to forward a packet, we could use the same functions, but we just don't change the ip addressses. 
 
 ## Mutexes
 
@@ -108,3 +118,7 @@ This is because there could be more efficient routes to get back to the source.
 Hence, we should check the RIP table and find the interface to write the response back to, which we we will assign to `outgoing_interface_idx`.
 
 All protocol layers will use `outgoing_interface_idx` to set the appropriate source addresses for their packets.
+
+**NOTE**: we will always finish determining the interface to response to packets ( `outgoing_interface_idx`) at the IP processing layer.
+
+

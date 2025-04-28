@@ -65,8 +65,8 @@ void print_rip_cache() {
     }
 }
 
-uint32_t split_horizon_poisoned_reverse(uint32_t cost, uint32_t adverstiser, uint32_t dst_ipv4_addr) {
-    if (adverstiser == dst_ipv4_addr) return RIP_COST_INFINITY;
+uint32_t split_horizon_poisoned_reverse(uint32_t cost, int adverstiser_interface_idx, int dst_interface_idx) {
+    if (adverstiser_interface_idx == dst_interface_idx) return RIP_COST_INFINITY;
     return cost;
 }
 /* create a rip broadcast with the entries from rip_vcache_v4
@@ -122,7 +122,7 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
             entry->ip_dst = rip_cache_v4[i].ip_dst;
             entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
             entry->next_hop = rip_cache_v4[i].next_hop;
-            entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].advertiser, ipv4_src_addr));
+            entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].iface_idx, interface_idx));
         }
     }
 
@@ -137,6 +137,7 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
     udp_hdr->dst_port = htons(UDP_PORT_RIP);
     udp_hdr->len = htons(rip_pkt_len + sizeof(struct udp_hdr));
     uint32_t ipv4_dst_addr = RIP_MULTICAST_ADDR;    // broadcast
+    udp_hdr->cksum = 0;
     udp_hdr->cksum = udp_cksum((uint16_t *)udp_hdr, (uint16_t*)rip_pkt,  
                                 (uint16_t*)&interfaces[interface_idx].ipv4_addr, (uint16_t*)&ipv4_dst_addr, 
                                 (uint16_t)(rip_pkt_len + sizeof(struct udp_hdr)));
@@ -282,7 +283,7 @@ void create_rip_threads() {
  * 
  * Write the address of the RIP packet to the the `dst` pointer and return the length of the packet.
  */
-int create_rip_broadcast_msg(unsigned char **dst, uint32_t ipv4_src_addr) {
+int create_rip_broadcast_msg(unsigned char **dst, int interface_idx) {
     pthread_mutex_lock(&rip_cache_mutex);
 
     int pkt_len = sizeof(struct rip_hdr) + sizeof(struct rip_message_entry) * rip_cache_v4.size();
@@ -307,7 +308,7 @@ int create_rip_broadcast_msg(unsigned char **dst, uint32_t ipv4_src_addr) {
         entry->ip_dst = rip_cache_v4[i].ip_dst;
         entry->subnet_mask =  rip_cache_v4[i].subnet_mask;
         entry->next_hop = rip_cache_v4[i].next_hop;
-        entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].advertiser, ipv4_src_addr));
+        entry->cost = htonl(split_horizon_poisoned_reverse(rip_cache_v4[i].cost, rip_cache_v4[i].iface_idx, interface_idx));
     }
     pthread_mutex_unlock(&rip_cache_mutex);
     *dst = rip_pkt;
@@ -344,7 +345,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
     }
 
     /* As per the RFC, make sure it is from one of our interfaces (from a directly-connected network)*/
-    int from_interface_idx = -1, rip_cache_idx = -1;
+    int from_interface_idx = -1;
     for (int i = 0 ; i < num_interfaces; i++) {
         if ((interfaces[i].ipv4_addr & interfaces[i].subnet_mask) == (ipv4_src_addr & interfaces[i].subnet_mask)) {
             if (debug) {
@@ -353,7 +354,6 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
                 puts("");
             }
             from_interface_idx = i;
-            rip_cache_idx = interfaces[from_interface_idx].rip_cache_idx;
             break;
         }
     }
@@ -361,6 +361,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
         fprintf(stderr, "[!] RIP packet is not from one of our interfaces. Ignoring...\n");
         return 0;
     }
+    //int reply_interface_idx = get_interface_for_route(ipv4_src_addr);
     if (hdr->command == 1) {    // RIP request
     
         /* construct a RIP reply packet by replacing the cost of each entry with the one in our RIP table
@@ -392,16 +393,16 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
             /* special case, asking for the entire routing table */
             if (request_rip_entry->addr_family == 0 && num_entries == 1) { 
                 if (debug) {
-                    printf("[*] Received RIP request for entire routing table from interface %d - \n", from_interface_idx);
-                    print_addr_4((uint8_t*)&interfaces[from_interface_idx].ipv4_addr);
+                    printf("[*] Received RIP request for entire routing table from interface %d - \n", thread_interface_idx);
+                    print_addr_4((uint8_t*)&interfaces[thread_interface_idx].ipv4_addr);
                     puts("");
                 }
                 /* `create_rip_broadcast_msg` will create a packet. so free this one */
                 free(reply_rip_pkt);
                 /* since it's a broadcast respose, it will have different length from the request */
-                ret = create_rip_broadcast_msg(&reply_rip_pkt, ipv4_src_addr);
+                ret = create_rip_broadcast_msg(&reply_rip_pkt, thread_interface_idx);
                 if (ret <= 0) {
-                    fprintf(stderr, "[!] Failed to create RIP reply packet for interface %d...!!!\n", from_interface_idx);
+                    fprintf(stderr, "[!] Failed to create RIP reply packet for interface %d...!!!\n", thread_interface_idx);
                     return ret;
                 }
                 break;
@@ -411,7 +412,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
             pthread_mutex_lock(&rip_cache_mutex);
             for (int j = 0 ; j < (int)rip_cache_v4.size(); j++) {
                 if ((rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask) == (request_entry_ip_dst & request_entry_subnet_mask)) {
-                    reply_rip_entry->cost = split_horizon_poisoned_reverse(rip_cache_v4[j].cost, rip_cache_v4[j].advertiser, ipv4_src_addr);
+                    reply_rip_entry->cost = split_horizon_poisoned_reverse(rip_cache_v4[j].cost, rip_cache_v4[j].iface_idx, thread_interface_idx);
                     break;
                 }
             }
@@ -433,12 +434,11 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
         if (num_entries == 0) return -1;
 
         if (debug) {
-            printf("[*] Received RIP response from interface %d - ", from_interface_idx);
-            print_addr_4((uint8_t*)&interfaces[from_interface_idx].ipv4_addr);
+            printf("[*] Received RIP response from interface %d - ", thread_interface_idx);
+            print_addr_4((uint8_t*)&interfaces[thread_interface_idx].ipv4_addr);
             puts("");
         }
         
-        printf("%d\n", rip_cache_idx);
         pthread_mutex_lock(&rip_cache_mutex);
         for (int i = 0 ; i < num_entries; i++) {
             struct rip_message_entry *reply_rip_entry = (struct rip_message_entry*)(incoming_rip_packet + sizeof(struct rip_hdr) 
@@ -454,13 +454,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
                     continue;
             }
             
-            if (rip_cache_idx >= (int)rip_cache_v4.size()) {
-                fprintf(stderr, "[!] Invalid RIP cache index: %d\n", rip_cache_idx);
-                pthread_mutex_unlock(&rip_cache_mutex);
-                return -1;
-            }
-            
-            reply_entry_cost = std::min(reply_entry_cost + rip_cache_v4[rip_cache_idx].cost, (uint32_t)RIP_COST_INFINITY);
+            reply_entry_cost = std::min(reply_entry_cost + rip_cache_v4[thread_interface_idx].cost, (uint32_t)RIP_COST_INFINITY);
             int existed = 0; /* 0 if entry is not currently in our cache */
             for (size_t j = 0  ; j < rip_cache_v4.size(); j++) {
                 if ((reply_entry_ip_dst & reply_entry_subnet_mask) == (rip_cache_v4[j].ip_dst & rip_cache_v4[j].subnet_mask)) {
@@ -479,7 +473,6 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
                             if (rip_cache_v4[j].state != RIP_CACHE_ETNRY_STATE_DELETED) {
                                 rip_cache_v4[j].state = RIP_CACHE_ETNRY_STATE_DELETED;
                                 rip_cache_v4[j].cost = RIP_COST_INFINITY;
-                                pthread_mutex_unlock(&rip_cache_mutex);
                                 if (debug > 1) {
                                     printf("[!] Marked cache entry for deletion %ld: ", j);
                                 }
@@ -492,7 +485,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
                             rip_cache_v4[j].advertiser = ipv4_src_addr;
                             rip_cache_v4[j].flag = ROUTE_CHANGE_FLAG;
                             rip_cache_v4[j].timer = time(NULL);
-                            rip_cache_v4[j].iface_idx = from_interface_idx;
+                            rip_cache_v4[j].iface_idx = thread_interface_idx;
                             rip_cache_v4[j].is_directly_connected = 0;
                             /* only set this entry as the default interface if we don't have a default interface 
                              * (which shoud be directly connected and checked at the beginning of this loop)
@@ -521,7 +514,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
                             rip_cache_v4[j].advertiser = ipv4_src_addr;
                             rip_cache_v4[j].flag = ROUTE_CHANGE_FLAG;
                             rip_cache_v4[j].timer = time(NULL);
-                            rip_cache_v4[j].iface_idx = from_interface_idx;
+                            rip_cache_v4[j].iface_idx = thread_interface_idx;
                             rip_cache_v4[j].is_directly_connected = 0;
                             /* only set this entry as the default interface if we don't have a default interface 
                              * (which shoud be directly connected and checked at the beginning of this loop)
@@ -564,7 +557,7 @@ int process_rip(unsigned char *incoming_rip_packet, uint32_t ipv4_src_addr, int 
 
                     .flag = ROUTE_CHANGE_FLAG,
                     .timer = time(NULL),
-                    .iface_idx = from_interface_idx,
+                    .iface_idx = thread_interface_idx,
                     .is_directly_connected = 0,
                     .is_default_route = 0,
                     .advertiser = ipv4_src_addr,

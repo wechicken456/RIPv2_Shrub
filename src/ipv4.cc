@@ -46,55 +46,40 @@ int find_interface_for_nxt_hop_idx(int nxt_hop) {
 }
 
 int get_interface_for_route(uint32_t dst_addr) {
-    int nxt_hop_idx = -1, ret_interface_idx = -1;
+    int ret_interface_idx = -1;
+    /* if it's multicast, we don't have to reply. But if we do, 
+     * send it back to where it came from, which is the interface this thread is responsible for
+     */
+    if (dst_addr == RIP_MULTICAST_ADDR) return thread_interface_idx;
+
     pthread_mutex_lock(&rip_cache_mutex);
     for (int i = 0 ; i < (int)rip_cache_v4.size(); i++) {
 
         if ( i == default_route_idx) continue;
-
-        /* if it's multicast, we don't have to reply. But if we do, 
-        * send it back to where it came from, which is the interface this thread is responsible for
-        */
-        if (dst_addr == RIP_MULTICAST_ADDR) { 
-            pthread_mutex_unlock(&rip_cache_mutex);
-            return thread_interface_idx;
-        }
 
         /* find the interface we should forward this packet to */
         if (rip_cache_v4[i].ip_dst == (dst_addr & rip_cache_v4[i].subnet_mask)) {
             if (rip_cache_v4[i].cost == RIP_COST_INFINITY) {
                 continue;
             }
-            nxt_hop_idx = i;
+            ret_interface_idx = rip_cache_v4[i].iface_idx;
             break;
         }
     }
 
-    if (nxt_hop_idx != -1) {
-        /* find the interface that is responsible for the next hop 
-         * this could fail, so there's another check below
-         */
-        uint32_t nxt_hop = rip_cache_v4[nxt_hop_idx].next_hop;
-        ret_interface_idx = find_interface_for_nxt_hop_idx(nxt_hop);
-    }
-
-    if (default_route_idx != -1 && ret_interface_idx < 0) {
+    if (default_route_idx >= 0 && ret_interface_idx == -1) {
         /* if we don't have a route for this packet, but we have a default route, use it 
          * If the default route is directly connected, then we have an interface for it 
          * Otherwise, another router advertised it, so we have to write the packet to the interface that received the advertisement
          */
-        if (rip_cache_v4[default_route_idx].is_directly_connected) {
-            pthread_mutex_unlock(&rip_cache_mutex);
-            return default_route_idx;
-        }
+        if (rip_cache_v4[default_route_idx].is_directly_connected) 
+            ret_interface_idx = default_route_idx;
+        else 
+            /* if the default route is not directly connected, 
+            * then we have to find the interface that is responsible  
+            */
+            ret_interface_idx = rip_cache_v4[default_route_idx].iface_idx;
 
-        /* if the default route is not directly connected, 
-         * then we have to find the interface that is responsible  
-         */
-        nxt_hop_idx = default_route_idx;
-        uint32_t nxt_hop = rip_cache_v4[nxt_hop_idx].next_hop;
-        ret_interface_idx = find_interface_for_nxt_hop_idx(nxt_hop);
-        if (ret_interface_idx < 0) ret_interface_idx = rip_cache_v4[nxt_hop_idx].iface_idx;
     }
     pthread_mutex_unlock(&rip_cache_mutex);
     return ret_interface_idx;
@@ -204,7 +189,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
             }
             return icmp_len + ipv4_hdr_len;
         }
-        hdr->time_to_live = ntohs(htons(hdr->time_to_live) - 1);
+        hdr->time_to_live -= 1;
         hdr->hdr_checksum = 0;
         hdr->hdr_checksum = in_cksum((unsigned short *)hdr, ipv4_hdr_len, 0);
 
@@ -222,7 +207,7 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
     if (found_interface_idx == -1) {
         fprintf(stderr, "[!] For us: but can't find route to reply to...");
         print_addr_4((uint8_t*)&hdr->src_addr);
-        puts("\nSending ICMP error message..."); 
+        puts("\nSending ICMP error message..process_rip."); 
         int icmp_len = iov_create_icmp_error(in_packet, ntohs(hdr->total_len), ipv4_hdr_len, ICMP_TYPE_DEST_UNREACHABLE, ICMP_CODE_NO_ROUTE, iov_idx + 1);
         int ipv4_hdr_len = iov_create_ipv4_hdr(interfaces[outgoing_interface_idx].ipv4_addr, *(uint32_t*)&(hdr->src_addr), icmp_len, IPPROTO_ICMP, iov_idx);
         if (icmp_len <= 0 || ipv4_hdr_len <= 0) {

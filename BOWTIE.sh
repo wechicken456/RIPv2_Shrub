@@ -4,9 +4,9 @@ PROGRAM="shrub" ## allow specifying a different name for shub program.
 
 #
 # enable debugging if requested
-# DEBUG="-d -d"
+DEBUG="-d -d"
 # DEBUG="-d"
-DEBUG=""
+#DEBUG=""
 RIP_INTERVAL_ARG="-r 1"
 
 

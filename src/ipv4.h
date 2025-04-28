@@ -25,6 +25,7 @@ struct ipv4_hdr {
  * where iov_idx (defined in `main.c`, included in `include.h`) is the index of the iov array to which the REPLY IPv4 header will be written. 
  */
 int process_ipv4(unsigned char *in_packet, int iov_idx);
+int get_interface_for_route(uint32_t dst_addr);
 
 /* throughout the transmission protocol layer (TCP/UDP), we might 
  * reach an error that forces us to reply with an ICMP error packet. 
