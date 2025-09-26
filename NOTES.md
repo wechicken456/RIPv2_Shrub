@@ -110,9 +110,12 @@ Section 3.7 of RFC 2453 states:
 All are thread local variables.
 
 By default, `outgoing_interface_idx` = `meant_for_interface_idx` = `thread_interface_idx`.
-where `thread_interface_idx` is the interface the thread is responsible for reading pcap packets from and write to.
+where:
+- `thread_interface_idx` is the interface the thread is responsible for reading pcap packets from and write to.
+- `meant_for_interface_idx`: the interface that is the destination address of the packet we're processing. 
+- `outgoing_interface_idx`: the interface to write the reply packet to. 
 
-However, say we have 2 interfaces `172.31.1.254` and `172.31.2.253`. When a packet is sent to us on `172.31.2.253`, but we received (read) it on `172.31.1.254`, we should use the same IP address (`172.31.2.253`) in our response packet, but we shouldn't immediately conclude that we should write the response packet back to the interface we read it from (`172.31.1.254`).
+E.g.: say we have 2 interfaces `172.31.1.254` and `172.31.2.253`. When a packet is sent to us on `172.31.2.253`, but we received (read) it on `172.31.1.254`, we should use the same IP address (`172.31.2.253`) in our response packet, but we shouldn't immediately conclude that we should write the response packet back to the interface we read it from (`172.31.1.254`), since there could be more efficient routes in our RIP table. Here, `meant_for_interface_idx` is the interface that has IP address `127.31.2.253`, while `outgoing_interface_idx` is the one that has IP address `172.31.2.254`.
 
 Consider the scenario where the only path to `.2.253` is through the interface `.1.254`, and the packet is meant for IP address `.2.253`. The interface `.1.254` will pick this packet up, but since it is meant for us, we should process it immediately. 
 

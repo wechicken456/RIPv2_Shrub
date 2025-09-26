@@ -94,6 +94,28 @@ int get_ip_and_filename(char *in_str, char *out_filename, int interface_idx) {
     }
     return -1;
 }
+
+int get_ip_from_filename(char *in_str, uint32_t *out_ipv4_addr) {
+    char *input_copy = strdup(in_str);
+    
+    char *ip_addr_end = strchr(input_copy, (int)'_');
+    if (ip_addr_end == NULL) {
+        fprintf(stderr, "[!] Invalid interface argument: %s\n", in_str);
+        return -1;
+    }
+
+    if (ip_addr_end != NULL) {         
+        *ip_addr_end = '\0'; // now input_copy is '_' -truncated
+        
+        if (ip_string_to_uint(input_copy, out_ipv4_addr) != 0) {    // extract host ip address, also check if the provided X.X.X.Y is valid IP string
+            return -1;
+        }
+        return 0;
+    }
+    return -1;
+}
+
+
 	
 /* compute checksum for an incoming requesta
 Initially, the checksum field of the sender is 0.

@@ -173,7 +173,8 @@ int process_ipv4(unsigned char *in_packet, int iov_idx) {
         /* If found a route to forward this packet, use it
          * we have to create a new packet and copy from it instead of using the original one 
          * because the original packet is a global buffer to read from pcap,
-         * while write_pcap will free the buffers in the iov array. So we can't free the global buffer.
+         * while write_pcap will free the buffers 
+in the iov array. So we can't free the global buffer.
          */
         fprintf(stderr, "[!] Packet is not for us, but we have a route for it. Forwarding...\n");
         if (hdr->time_to_live == 1) {

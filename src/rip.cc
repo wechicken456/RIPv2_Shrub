@@ -184,10 +184,10 @@ int create_rip_broadcast_pkt(uint8_t *mac_addr, uint32_t ipv4_src_addr, int inte
 
 void* loop_rip_broadcast(void* _interface_idx) {
     int interface_idx = *(int*)_interface_idx;
-    if (default_route_idx != -1 && interface_idx == default_route_idx) {
-        fprintf(stderr, "[!] RIP broadcast thread for interface %d is the default route. ABORTING!!!\n", interface_idx);
-        pthread_exit(NULL);
-    }
+    // if (default_route_idx != -1 && interface_idx == default_route_idx) {
+    //     fprintf(stderr, "[!] RIP broadcast thread for interface %d is the default route. ABORTING!!!\n", interface_idx);
+    //     pthread_exit(NULL);
+    // }
     int ret;
     uint32_t ipv4_src_addr = interfaces[interface_idx].ipv4_addr;
     unsigned char *mac_addr = interfaces[interface_idx].mac_addr;

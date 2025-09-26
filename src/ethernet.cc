@@ -59,11 +59,16 @@ int process_ethernet(unsigned char *in_packet, int iov_idx) {
     struct eth_hdr *new_eth = NULL;
     orig_eth->h_proto = htons(orig_eth->h_proto);
 
-    
-    if (memcmp(&orig_eth->h_source, &interfaces[thread_interface_idx].mac_addr, 6) == 0) {
-        fprintf(stderr, "[!] process_ethernet: Packet is from us. Ignoring...\n");
-        return 0;
+    for (int i = 0 ; i < num_interfaces; i++) {
+        if (memcmp(&orig_eth->h_source, &interfaces[i].mac_addr, 6) == 0) {
+            fprintf(stderr, "[!] process_ethernet: Packet is from us. Ignoring...\n");
+            return 0;
+        }
     }
+    // if (memcmp(&orig_eth->h_source, &interfaces[thread_interface_idx].mac_addr, 6) == 0) {
+    //     fprintf(stderr, "[!] process_ethernet: Packet is from us. Ignoring...\n");
+    //     return 0;
+    // }
     
     switch (orig_eth->h_proto) { 
         case ETHERTYPE_IPV4: // IPv4 
